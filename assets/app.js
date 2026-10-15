@@ -3,11 +3,12 @@ import { firebaseConfig, ADMIN_UID } from "./firebase-config.js";
 const $ = (selector) => document.querySelector(selector);
 const months = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 const weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+
 const shiftInfo = {
-  A: { name: "A 更 · 早更", start: "07:00", end: "15:00", className: "a" },
-  B: { name: "B 更 · 下午更", start: "14:30", end: "22:30", className: "b" },
-  C: { name: "C 更 · 夜更", start: "22:00", end: "07:00", className: "c" },
-  E: { name: "E 更 · 日更", start: "08:30", end: "17:00", className: "e" },
+  A: { name: "A 更 · 早更", start: "07:30", end: "17:06", className: "a" },
+  B: { name: "B 更 · 下午更", start: "15:30", end: "01:06", className: "b" },
+  C: { name: "C 更 · 夜更", start: "22:30", end: "08:06", className: "c" },
+  E: { name: "E 更 · 日更", start: "08:30", end: "18:06", className: "e" },
   OFF: { name: "休息日", start: "", end: "", className: "off" }
 };
 
@@ -82,11 +83,10 @@ function updateStatus(message, variant = "") {
 }
 
 function authErrorText(error) {
-  const code = error?.code || "unknown";
-  if (code === "auth/unauthorized-domain") {
+  if (error?.code === "auth/unauthorized-domain") {
     return "此網站網域尚未在 Firebase 授權。請確認已加入 d-hkd.github.io。";
   }
-  return `Google 登入未能完成（${code}）。請將此代碼告訴管理員。`;
+  return `Google 登入未能完成（${error?.code || "unknown"}）。請再試一次。`;
 }
 
 function renderYearSelect() {
@@ -132,8 +132,7 @@ function renderCalendar() {
   grid.replaceChildren();
   const first = new Date(state.year, state.month, 1);
   const monthLength = new Date(state.year, state.month + 1, 0).getDate();
-  const cells = first.getDay() + monthLength;
-  const totalCells = Math.ceil(cells / 7) * 7;
+  const totalCells = Math.ceil((first.getDay() + monthLength) / 7) * 7;
   const counts = { A: 0, B: 0, C: 0, E: 0, OFF: 0 };
 
   for (let index = 0; index < totalCells; index += 1) {
@@ -147,12 +146,12 @@ function renderCalendar() {
       grid.append(cell);
       continue;
     }
+
     const date = new Date(state.year, state.month, dayNumber);
     const key = dateKey(date);
     const day = getDay(key);
-    const isToday = key === dateKey(now);
     if (key === state.selectedKey) cell.classList.add("is-selected");
-    if (isToday) cell.classList.add("is-today");
+    if (key === dateKey(now)) cell.classList.add("is-today");
     if (day?.type === "OFF") cell.classList.add("off-day");
     if (day?.type) counts[day.type] += 1;
     cell.setAttribute("role", "gridcell");
@@ -259,25 +258,12 @@ function render() {
   renderEditor();
 }
 
-async function switchYear(year) {
-  state.year = year;
-  if (state.month > 11) state.month = 0;
-  state.selectedKey = dateKey(new Date(year, state.month, 1));
-  if (state.mode === "demo") {
-    state.days = createDemoSchedule(year);
-    render();
-    return;
-  }
-  await subscribeRoster();
-}
-
 async function subscribeRoster() {
   if (!state.firebase) return;
   state.unsubscribe?.();
   updateStatus("正在載入…");
   const { db, doc, onSnapshot } = state.firebase;
-  const rosterRef = doc(db, "rosters", String(state.year));
-  state.unsubscribe = onSnapshot(rosterRef, (snapshot) => {
+  state.unsubscribe = onSnapshot(doc(db, "rosters", String(state.year)), (snapshot) => {
     state.days = snapshot.exists() ? (snapshot.data().days || {}) : {};
     updateStatus(snapshot.metadata.fromCache ? "離線快取" : "已同步", "live");
     render();
@@ -287,6 +273,17 @@ async function subscribeRoster() {
     updateStatus("未能讀取資料", "error");
     render();
   });
+}
+
+async function switchYear(year) {
+  state.year = year;
+  state.selectedKey = dateKey(new Date(year, state.month, 1));
+  if (state.mode === "demo") {
+    state.days = createDemoSchedule(year);
+    render();
+  } else {
+    await subscribeRoster();
+  }
 }
 
 async function startFirebase() {
@@ -332,8 +329,7 @@ async function signIn() {
 }
 
 async function signOut() {
-  if (!state.firebase) return;
-  await state.firebase.signOut(state.firebase.authInstance);
+  if (state.firebase) await state.firebase.signOut(state.firebase.authInstance);
 }
 
 async function saveDay(event) {
@@ -352,10 +348,9 @@ async function saveDay(event) {
   };
   try {
     const { doc, setDoc, serverTimestamp, db } = state.firebase;
-    const nextDays = { ...state.days, [state.selectedKey]: day };
     await setDoc(doc(db, "rosters", String(state.year)), {
       year: state.year,
-      days: nextDays,
+      days: { ...state.days, [state.selectedKey]: day },
       updatedAt: serverTimestamp(),
       updatedBy: state.user.uid
     });
@@ -391,36 +386,29 @@ async function clearDay() {
   }
 }
 
+function applyShiftPreset(type) {
+  const defaults = shiftInfo[type];
+  $("#edit-start").value = defaults.start;
+  $("#edit-end").value = defaults.end;
+}
+
 function registerEvents() {
   $("#previous-year").addEventListener("click", () => switchYear(state.year - 1));
   $("#next-year").addEventListener("click", () => switchYear(state.year + 1));
   $("#year-select").addEventListener("change", (event) => switchYear(Number(event.target.value)));
   $("#admin-toggle").addEventListener("click", () => {
     const panel = $("#admin-panel");
-    panel.hidden = !panel.hidden;
-    if (!panel.hidden) panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    panel.hidden = false;
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   $("#sign-in").addEventListener("click", signIn);
   $("#sign-out").addEventListener("click", signOut);
   $("#editor-form").addEventListener("submit", saveDay);
   $("#clear-day").addEventListener("click", clearDay);
-  $("#edit-type").addEventListener("change", (event) => {
-    const defaults = shiftInfo[event.target.value];
-    $("#edit-start").value = defaults.start;
-    $("#edit-end").value = defaults.end;
-  });
+  $("#edit-type").addEventListener("change", (event) => applyShiftPreset(event.target.value));
 }
 
 registerEvents();
 state.days = createDemoSchedule(state.year);
 render();
 if (configured) startFirebase();
-
-document.querySelector("#admin-toggle")?.addEventListener("click", () => {
-  const panel = document.querySelector("#admin-panel");
-  if (panel) {
-    panel.hidden = false;
-    panel.style.display = "grid";
-    panel.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-});
