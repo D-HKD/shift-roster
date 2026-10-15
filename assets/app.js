@@ -298,6 +298,13 @@ async function startFirebase() {
       state.isOwner = Boolean(user && validOwner && user.uid === ADMIN_UID);
       renderEditor();
     });
+    auth.getRedirectResult(authInstance).catch((error) => {
+      console.error("Redirect sign in failed:", error);
+      const reason = error.code === "auth/unauthorized-domain"
+        ? "此網站網域尚未在 Firebase 授權。請確認已加入 d-hkd.github.io。"
+        : "Google 登入未能完成。請再試一次，或確認 Firebase 的 Google 登入已啟用。";
+      $("#admin-message").textContent = reason;
+    });
     await subscribeRoster();
   } catch (error) {
     console.error("Firebase initialisation failed:", error);
@@ -310,12 +317,16 @@ async function startFirebase() {
 
 async function signIn() {
   if (!state.firebase) return;
-  const { GoogleAuthProvider, signInWithPopup, authInstance } = state.firebase;
+  const { GoogleAuthProvider, signInWithRedirect, authInstance } = state.firebase;
   try {
-    await signInWithPopup(authInstance, new GoogleAuthProvider());
+    $("#admin-message").textContent = "正在前往 Google 登入…";
+    await signInWithRedirect(authInstance, new GoogleAuthProvider());
   } catch (error) {
     console.error("Sign in failed:", error);
-    $("#admin-message").textContent = "未能登入。請確認 Firebase 已啟用 Google 登入，並已加入此網站網域。";
+    const reason = error.code === "auth/unauthorized-domain"
+      ? "此網站網域尚未在 Firebase 授權。請確認已加入 d-hkd.github.io。"
+      : "未能登入。請確認 Firebase 已啟用 Google 登入，並已加入此網站網域。";
+    $("#admin-message").textContent = reason;
   }
 }
 
