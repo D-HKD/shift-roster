@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#061e35" />
+    <meta name="description" content="私人更表 — 簡潔、安全、適合手機瀏覽的工作時間表。" />
+    <title>私人更表</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+HK:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <div class="page-glow glow-one"></div>
+    <div class="page-glow glow-two"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="私人更表首頁">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>
+          <strong>私人更表</strong>
+          <small>SHIFT ROSTER</small>
+        </span>
+      </a>
+      <div class="topbar-actions">
+        <span id="sync-status" class="sync-status" aria-live="polite"><span class="status-dot"></span> 示範資料</span>
+        <button id="admin-toggle" class="button button-ghost" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.75a5 5 0 0 0-5 5v3H5.75A1.75 1.75 0 0 0 4 12.5v7.75C4 21.22 4.78 22 5.75 22h12.5c.97 0 1.75-.78 1.75-1.75V12.5c0-.97-.78-1.75-1.75-1.75H17v-3a5 5 0 0 0-5-5Zm-3 8v-3a3 3 0 1 1 6 0v3H9Z"/></svg>
+          管理員
+        </button>
+      </div>
+    </header>
+
+    <main id="top" class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">WORK SCHEDULE · PRIVATE ROSTER</p>
+          <h1>一眼睇清，<br /><em>每一更。</em></h1>
+          <p class="hero-copy">清晰顯示全年更份、上落更時間及休假日。任何人可瀏覽，只有授權管理員可以更新。</p>
+        </div>
+        <div class="hero-today" aria-label="今日更份">
+          <span class="today-rule">今日</span>
+          <strong id="today-date">--</strong>
+          <span id="today-shift" class="shift-chip muted">未編排</span>
+        </div>
+      </section>
+
+      <section class="control-row" aria-label="更表控制">
+        <div class="year-controls">
+          <button id="previous-year" class="icon-button" type="button" aria-label="上一年">←</button>
+          <label class="year-label" for="year-select">年份</label>
+          <select id="year-select" aria-label="選擇年份"></select>
+          <button id="next-year" class="icon-button" type="button" aria-label="下一年">→</button>
+        </div>
+        <div id="month-tabs" class="month-tabs" role="tablist" aria-label="選擇月份"></div>
+      </section>
+
+      <section class="roster-layout">
+        <div class="calendar-card">
+          <div class="calendar-head">
+            <div>
+              <p class="section-kicker">MONTHLY VIEW</p>
+              <h2 id="calendar-title">--</h2>
+            </div>
+            <div id="calendar-summary" class="calendar-summary"></div>
+          </div>
+          <div class="weekdays" aria-hidden="true">
+            <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+          </div>
+          <div id="calendar-grid" class="calendar-grid" role="grid" aria-label="月曆"></div>
+        </div>
+
+        <aside class="detail-card" aria-live="polite">
+          <div class="detail-topline"><span>SELECTED DAY</span><span id="detail-weekday">--</span></div>
+          <h2 id="detail-date">請選擇日期</h2>
+          <div id="detail-shift-visual" class="detail-shift-visual is-empty">
+            <span class="detail-shift-letter">—</span>
+            <div><strong id="detail-shift-name">未編排</strong><small id="detail-shift-time">尚未設定更份</small></div>
+          </div>
+          <div class="detail-note-wrap">
+            <span class="label">備註</span>
+            <p id="detail-note">選擇月曆內的日子查看詳情。</p>
+          </div>
+          <div class="legend" aria-label="更份圖例">
+            <span><i class="legend-dot a"></i>A 早更</span>
+            <span><i class="legend-dot b"></i>B 下午更</span>
+            <span><i class="legend-dot c"></i>C 夜更</span>
+            <span><i class="legend-dot e"></i>E 日更</span>
+            <span><i class="legend-dot off"></i>休息</span>
+          </div>
+        </aside>
+      </section>
+
+      <section id="admin-panel" class="admin-panel" hidden>
+        <div class="admin-intro">
+          <p class="section-kicker">ADMINISTRATOR AREA</p>
+          <h2>更新更表</h2>
+          <p id="admin-message">登入已授權的 Google 帳戶後，便可以編輯及發布更表。</p>
+          <div class="admin-actions">
+            <button id="sign-in" class="button button-primary" type="button">以 Google 登入</button>
+            <button id="sign-out" class="button button-ghost" type="button" hidden>登出</button>
+          </div>
+        </div>
+        <form id="editor-form" class="editor-form" hidden>
+          <div class="editor-head">
+            <strong id="editor-date">--</strong>
+            <span>所有儲存的資料會即時同步給瀏覽者。</span>
+          </div>
+          <div class="form-grid">
+            <label>更份
+              <select id="edit-type" required>
+                <option value="A">A — 早更</option>
+                <option value="B">B — 下午更</option>
+                <option value="C">C — 夜更</option>
+                <option value="E">E — 日更</option>
+                <option value="OFF">休息日</option>
+              </select>
+            </label>
+            <label>上班時間<input id="edit-start" type="time" /></label>
+            <label>下班時間<input id="edit-end" type="time" /></label>
+            <label class="note-field">備註（可選）<input id="edit-note" type="text" maxlength="70" placeholder="例如：調更／特別安排" /></label>
+          </div>
+          <div class="editor-footer">
+            <button id="clear-day" class="text-button" type="button">清除本日編排</button>
+            <button id="save-day" class="button button-primary" type="submit">儲存並發布</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="guide-strip">
+        <div><span class="guide-no">01</span><p><strong>選擇月份</strong>點選上方月份，即可查看該月安排。</p></div>
+        <div><span class="guide-no">02</span><p><strong>查看詳情</strong>點選日期，查看更份、時間與備註。</p></div>
+        <div><span class="guide-no">03</span><p><strong>即時更新</strong>管理員儲存後，所有瀏覽者會自動看見新資料。</p></div>
+      </section>
+    </main>
+
+    <footer>
+      <span>PRIVATE SHIFT ROSTER</span>
+      <span>此為個人自訂工具，與任何政府部門或機構無關。</span>
+    </footer>
+
+    <script type="module" src="assets/app.js"></script>
+  </body>
+</html>
