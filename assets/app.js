@@ -415,3 +415,12 @@ registerEvents();
 state.days = createDemoSchedule(state.year);
 render();
 if (configured) startFirebase();
+
+document.querySelector("#admin-toggle")?.addEventListener("click", () => {
+  const panel = document.querySelector("#admin-panel");
+  if (panel) {
+    panel.hidden = false;
+    panel.style.display = "grid";
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+});
