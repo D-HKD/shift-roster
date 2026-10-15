@@ -306,10 +306,6 @@ async function startFirebase() {
       state.isOwner = Boolean(user && validOwner && user.uid === ADMIN_UID);
       renderEditor();
     });
-    auth.getRedirectResult(authInstance).catch((error) => {
-      console.error("Redirect sign in failed:", error);
-      $("#admin-message").textContent = authErrorText(error);
-    });
     await subscribeRoster();
   } catch (error) {
     console.error("Firebase initialisation failed:", error);
@@ -322,10 +318,13 @@ async function startFirebase() {
 
 async function signIn() {
   if (!state.firebase) return;
-  const { GoogleAuthProvider, signInWithRedirect, authInstance } = state.firebase;
+  const { GoogleAuthProvider, signInWithPopup, authInstance } = state.firebase;
   try {
-    $("#admin-message").textContent = "正在前往 Google 登入…";
-    await signInWithRedirect(authInstance, new GoogleAuthProvider());
+    $("#admin-message").textContent = "正在開啟 Google 登入…";
+    const result = await signInWithPopup(authInstance, new GoogleAuthProvider());
+    state.user = result.user;
+    state.isOwner = Boolean(validOwner && result.user.uid === ADMIN_UID);
+    renderEditor();
   } catch (error) {
     console.error("Sign in failed:", error);
     $("#admin-message").textContent = authErrorText(error);
