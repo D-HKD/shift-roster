@@ -10,6 +10,26 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+HK:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="assets/styles.css" />
+    <style>
+      .shift-overview { display:grid; grid-template-columns:205px minmax(0,1fr) 136px; align-items:stretch; gap:22px; padding:22px 3px 28px; }
+      .shift-overview-heading { display:flex; flex-direction:column; justify-content:center; }
+      .shift-overview-heading h1 { margin:0; color:var(--navy); font-size:clamp(32px,4vw,45px); line-height:1.08; letter-spacing:-.055em; }
+      .shift-overview-heading > p:not(.eyebrow) { margin:12px 0 0; color:var(--grey); font-size:12px; }
+      .shift-schedule-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+      .shift-schedule-card { display:grid; grid-template-columns:34px 1fr; align-content:center; column-gap:10px; min-height:75px; padding:12px; background:rgba(255,255,255,.76); border:1px solid rgba(220,228,227,.92); border-radius:13px; box-shadow:0 8px 25px rgba(6,30,53,.035); }
+      .shift-schedule-card .shift-letter { display:grid; grid-row:span 2; place-items:center; width:34px; height:34px; border-radius:8px; font:500 16px "DM Mono",monospace; }
+      .shift-schedule-card strong { color:var(--navy); font-size:13px; }
+      .shift-schedule-card small { color:var(--grey); font-size:10px; }
+      .shift-schedule-card time { grid-column:2; margin-top:4px; color:var(--ink); font:500 11px "DM Mono",monospace; }
+      .shift-schedule-card time span { color:var(--grey); font-size:9px; }
+      .shift-schedule-card.a .shift-letter { color:#057575; background:#d8f0ed; }
+      .shift-schedule-card.b .shift-letter { color:#316598; background:#e1ebf6; }
+      .shift-schedule-card.c .shift-letter { color:#665283; background:#e8e2f1; }
+      .shift-schedule-card.e .shift-letter { color:#8e6722; background:#f7eedc; }
+      .shift-overview .hero-today { align-self:center; min-width:0; }
+      @media (max-width:900px) { .shift-overview { grid-template-columns:170px minmax(0,1fr); }.shift-overview .hero-today { grid-column:2; justify-self:end; margin-top:-2px; }.shift-schedule-grid { grid-column:2; grid-row:1 / span 2; } }
+      @media (max-width:620px) { .shift-overview { grid-template-columns:1fr; gap:14px; padding:13px 1px 24px; }.shift-overview-heading h1 { font-size:32px; }.shift-overview-heading > p:not(.eyebrow) { margin-top:7px; }.shift-schedule-grid { grid-column:auto; grid-row:auto; grid-template-columns:1fr 1fr; gap:7px; }.shift-schedule-card { min-height:70px; grid-template-columns:29px 1fr; column-gap:8px; padding:9px; }.shift-schedule-card .shift-letter { width:29px; height:29px; font-size:14px; }.shift-schedule-card strong { font-size:12px; }.shift-schedule-card time { font-size:10px; }.shift-overview .hero-today { grid-column:auto; justify-self:end; width:max-content; margin:0; } }
+    </style>
   </head>
   <body>
     <div class="page-glow glow-one"></div>
@@ -33,11 +53,17 @@
     </header>
 
     <main id="top" class="shell">
-      <section class="hero">
-        <div>
-          <p class="eyebrow">WORK SCHEDULE · PRIVATE ROSTER</p>
-          <h1>一眼睇清，<br /><em>每一更。</em></h1>
-          <p class="hero-copy">清晰顯示全年更份、上落更時間及休假日。任何人可瀏覽，只有授權管理員可以更新。</p>
+      <section class="shift-overview" aria-label="各更份上落更時間">
+        <div class="shift-overview-heading">
+          <p class="eyebrow">SHIFT HOURS</p>
+          <h1>更份時間</h1>
+          <p>選擇更份後，時間會自動帶入；仍可按需要手動調整及加入備註。</p>
+        </div>
+        <div class="shift-schedule-grid">
+          <article class="shift-schedule-card a"><span class="shift-letter">A</span><strong>A 更</strong><small>早更</small><time>07:30 — 17:06</time></article>
+          <article class="shift-schedule-card b"><span class="shift-letter">B</span><strong>B 更</strong><small>下午更</small><time>15:30 — 01:06 <span>翌日</span></time></article>
+          <article class="shift-schedule-card c"><span class="shift-letter">C</span><strong>C 更</strong><small>夜更</small><time>22:30 — 08:06 <span>翌日</span></time></article>
+          <article class="shift-schedule-card e"><span class="shift-letter">E</span><strong>E 更</strong><small>日更</small><time>08:30 — 18:06</time></article>
         </div>
         <div class="hero-today" aria-label="今日更份">
           <span class="today-rule">今日</span>
@@ -110,10 +136,10 @@
           <div class="form-grid">
             <label>更份
               <select id="edit-type" required>
-                <option value="A">A — 早更</option>
-                <option value="B">B — 下午更</option>
-                <option value="C">C — 夜更</option>
-                <option value="E">E — 日更</option>
+                <option value="A">A — 早更　07:30–17:06</option>
+                <option value="B">B — 下午更　15:30–01:06（翌日）</option>
+                <option value="C">C — 夜更　22:30–08:06（翌日）</option>
+                <option value="E">E — 日更　08:30–18:06</option>
                 <option value="OFF">休息日</option>
               </select>
             </label>
