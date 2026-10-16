@@ -12,6 +12,22 @@ const shiftInfo = {
   OFF: { name: "休息日", start: "", end: "", className: "off" }
 };
 
+const hkHolidaySource = "https://www.1823.gov.hk/common/ical/tc.json";
+const fallbackPublicHolidays = {
+  "2025-01-01": "一月一日", "2025-01-29": "農曆年初一", "2025-01-30": "農曆年初二", "2025-01-31": "農曆年初三",
+  "2025-04-04": "清明節", "2025-04-18": "耶穌受難節", "2025-04-19": "耶穌受難節翌日", "2025-04-21": "復活節星期一",
+  "2025-05-01": "勞動節", "2025-05-05": "佛誕", "2025-05-31": "端午節", "2025-07-01": "香港特別行政區成立紀念日",
+  "2025-10-01": "國慶日", "2025-10-07": "中秋節翌日", "2025-10-29": "重陽節", "2025-12-25": "聖誕節", "2025-12-26": "聖誕節後第一個周日",
+  "2026-01-01": "一月一日", "2026-02-17": "農曆年初一", "2026-02-18": "農曆年初二", "2026-02-19": "農曆年初三",
+  "2026-04-03": "耶穌受難節", "2026-04-04": "耶穌受難節翌日", "2026-04-06": "清明節翌日", "2026-04-07": "復活節星期一翌日",
+  "2026-05-01": "勞動節", "2026-05-25": "佛誕翌日", "2026-06-19": "端午節", "2026-07-01": "香港特別行政區成立紀念日",
+  "2026-09-26": "中秋節翌日", "2026-10-01": "國慶日", "2026-10-19": "重陽節翌日", "2026-12-25": "聖誕節", "2026-12-26": "聖誕節後第一個周日",
+  "2027-01-01": "一月一日", "2027-02-06": "農曆年初一", "2027-02-08": "農曆年初三", "2027-02-09": "農曆年初四",
+  "2027-03-26": "耶穌受難節", "2027-03-27": "耶穌受難節翌日", "2027-03-29": "復活節星期一", "2027-04-05": "清明節",
+  "2027-05-01": "勞動節", "2027-05-13": "佛誕", "2027-06-09": "端午節", "2027-07-01": "香港特別行政區成立紀念日",
+  "2027-09-16": "中秋節翌日", "2027-10-01": "國慶日", "2027-10-08": "重陽節", "2027-12-25": "聖誕節", "2027-12-27": "聖誕節後第一個周日"
+};
+
 const configured = ["apiKey", "authDomain", "projectId", "appId"].every(
   (key) => firebaseConfig[key] && !firebaseConfig[key].includes("PASTE")
 );
@@ -26,7 +42,8 @@ const state = {
   user: null,
   isOwner: false,
   firebase: null,
-  unsubscribe: null
+  unsubscribe: null,
+  publicHolidays: { ...fallbackPublicHolidays }
 };
 
 function dateKey(date) {
@@ -67,6 +84,29 @@ function getDay(key) {
 
 function selectedDay() {
   return getDay(state.selectedKey);
+}
+
+function getPublicHoliday(key) {
+  return state.publicHolidays[key] || null;
+}
+
+async function loadPublicHolidays() {
+  try {
+    const response = await fetch(hkHolidaySource, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Holiday data returned ${response.status}`);
+    const data = await response.json();
+    const events = data?.vcalendar?.[0]?.vevent || [];
+    const officialHolidays = Object.fromEntries(events.flatMap((event) => {
+      const rawDate = Array.isArray(event?.dtstart) ? event.dtstart[0] : "";
+      if (typeof rawDate !== "string" || !/^\d{8}$/.test(rawDate)) return [];
+      const key = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+      return [[key, String(event.summary || "公眾假期")]];
+    }));
+    state.publicHolidays = { ...fallbackPublicHolidays, ...officialHolidays };
+    render();
+  } catch (error) {
+    console.warn("Could not refresh Hong Kong public holidays:", error);
+  }
 }
 
 function timeText(day) {
@@ -134,6 +174,7 @@ function renderCalendar() {
   const monthLength = new Date(state.year, state.month + 1, 0).getDate();
   const totalCells = Math.ceil((first.getDay() + monthLength) / 7) * 7;
   const counts = { A: 0, B: 0, C: 0, E: 0, OFF: 0 };
+  let holidayCount = 0;
 
   for (let index = 0; index < totalCells; index += 1) {
     const dayNumber = index - first.getDay() + 1;
@@ -150,17 +191,30 @@ function renderCalendar() {
     const date = new Date(state.year, state.month, dayNumber);
     const key = dateKey(date);
     const day = getDay(key);
+    const holiday = getPublicHoliday(key);
     if (key === state.selectedKey) cell.classList.add("is-selected");
     if (key === dateKey(now)) cell.classList.add("is-today");
     if (day?.type === "OFF") cell.classList.add("off-day");
+    if (holiday) {
+      cell.classList.add("is-public-holiday");
+      holidayCount += 1;
+    }
     if (day?.type) counts[day.type] += 1;
     cell.setAttribute("role", "gridcell");
-    cell.setAttribute("aria-label", `${formatDate(key)}，${day ? shiftInfo[day.type].name : "未編排"}`);
+    cell.setAttribute("aria-label", `${formatDate(key)}，${holiday ? `紅日：${holiday}，` : ""}${day ? shiftInfo[day.type].name : "未編排"}`);
 
     const number = document.createElement("span");
     number.className = "day-number";
     number.textContent = dayNumber;
     cell.append(number);
+    if (holiday) {
+      const flag = document.createElement("span");
+      flag.className = "holiday-label";
+      flag.textContent = "紅";
+      flag.title = holiday;
+      flag.setAttribute("aria-label", `紅日：${holiday}`);
+      cell.append(flag);
+    }
     if (day) {
       const shift = document.createElement("span");
       shift.className = "day-shift";
@@ -192,6 +246,15 @@ function renderCalendar() {
     item.append(pill, document.createTextNode(`${counts[type]}日`));
     summary.append(item);
   });
+  if (holidayCount) {
+    const item = document.createElement("span");
+    item.className = "summary-item holiday-summary";
+    const pill = document.createElement("b");
+    pill.className = "summary-pill";
+    pill.textContent = "紅";
+    item.append(pill, document.createTextNode(`${holidayCount}日`));
+    summary.append(item);
+  }
 }
 
 function renderDetails() {
@@ -199,6 +262,10 @@ function renderDetails() {
   const date = parseKey(state.selectedKey);
   $("#detail-date").textContent = formatDate(state.selectedKey);
   $("#detail-weekday").textContent = weekdays[date.getDay()];
+  const holiday = getPublicHoliday(state.selectedKey);
+  const holidayText = $("#detail-holiday");
+  holidayText.hidden = !holiday;
+  holidayText.textContent = holiday ? `紅日 · ${holiday}` : "";
   const visual = $("#detail-shift-visual");
   const letter = visual.querySelector(".detail-shift-letter");
   if (!day) {
@@ -411,4 +478,5 @@ function registerEvents() {
 registerEvents();
 state.days = createDemoSchedule(state.year);
 render();
+void loadPublicHolidays();
 if (configured) startFirebase();
