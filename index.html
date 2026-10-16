@@ -27,8 +27,14 @@
       .shift-schedule-card.c .shift-letter { color:#665283; background:#e8e2f1; }
       .shift-schedule-card.e .shift-letter { color:#8e6722; background:#f7eedc; }
       .shift-overview .hero-today { align-self:center; min-width:0; }
+      .calendar-day.is-public-holiday { background:#fff7f7; border-color:#f1c4c4; }
+      .calendar-day.is-public-holiday .day-number { color:#b43d3d; font-weight:700; }
+      .holiday-label { position:absolute; top:6px; right:6px; min-width:18px; padding:1px 4px; color:#b22727; background:#ffe1e1; border-radius:4px; font:500 9px "DM Mono",monospace; line-height:1.35; }
+      .calendar-day.is-today.is-public-holiday::after { right:31px; background:#caa45a; }
+      .detail-holiday { display:block; width:max-content; max-width:100%; margin:-10px 0 14px; padding:3px 7px; overflow:hidden; color:#ffd0d0; background:rgba(216,77,77,.2); border:1px solid rgba(255,171,171,.23); border-radius:999px; text-overflow:ellipsis; white-space:nowrap; font:10px "DM Mono",monospace; }
+      .legend-dot.holiday { background:#e36b6b; }
       @media (max-width:900px) { .shift-overview { grid-template-columns:170px minmax(0,1fr); }.shift-overview .hero-today { grid-column:2; justify-self:end; margin-top:-2px; }.shift-schedule-grid { grid-column:2; grid-row:1 / span 2; } }
-      @media (max-width:620px) { .shift-overview { grid-template-columns:1fr; gap:14px; padding:13px 1px 24px; }.shift-overview-heading h1 { font-size:32px; }.shift-overview-heading > p:not(.eyebrow) { margin-top:7px; }.shift-schedule-grid { grid-column:auto; grid-row:auto; grid-template-columns:1fr 1fr; gap:7px; }.shift-schedule-card { min-height:70px; grid-template-columns:29px 1fr; column-gap:8px; padding:9px; }.shift-schedule-card .shift-letter { width:29px; height:29px; font-size:14px; }.shift-schedule-card strong { font-size:12px; }.shift-schedule-card time { font-size:10px; }.shift-overview .hero-today { grid-column:auto; justify-self:end; width:max-content; margin:0; } }
+      @media (max-width:620px) { .shift-overview { grid-template-columns:1fr; gap:14px; padding:13px 1px 24px; }.shift-overview-heading h1 { font-size:32px; }.shift-overview-heading > p:not(.eyebrow) { margin-top:7px; }.shift-schedule-grid { grid-column:auto; grid-row:auto; grid-template-columns:1fr 1fr; gap:7px; }.shift-schedule-card { min-height:70px; grid-template-columns:29px 1fr; column-gap:8px; padding:9px; }.shift-schedule-card .shift-letter { width:29px; height:29px; font-size:14px; }.shift-schedule-card strong { font-size:12px; }.shift-schedule-card time { font-size:10px; }.shift-overview .hero-today { grid-column:auto; justify-self:end; width:max-content; margin:0; }.holiday-label { top:4px; right:4px; padding:1px 3px; font-size:8px; }.calendar-day.is-today.is-public-holiday::after { right:25px; } }
     </style>
   </head>
   <body>
@@ -100,6 +106,7 @@
         <aside class="detail-card" aria-live="polite">
           <div class="detail-topline"><span>SELECTED DAY</span><span id="detail-weekday">--</span></div>
           <h2 id="detail-date">請選擇日期</h2>
+          <span id="detail-holiday" class="detail-holiday" hidden></span>
           <div id="detail-shift-visual" class="detail-shift-visual is-empty">
             <span class="detail-shift-letter">—</span>
             <div><strong id="detail-shift-name">未編排</strong><small id="detail-shift-time">尚未設定更份</small></div>
@@ -114,6 +121,7 @@
             <span><i class="legend-dot c"></i>C 夜更</span>
             <span><i class="legend-dot e"></i>E 日更</span>
             <span><i class="legend-dot off"></i>休息</span>
+            <span><i class="legend-dot holiday"></i>紅日</span>
           </div>
         </aside>
       </section>
