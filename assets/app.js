@@ -160,16 +160,8 @@ function weatherVisualType(description = "") {
   return "partly";
 }
 
-function createWeatherScene(type) {
-  const scene = document.createElement("span");
-  scene.className = `weather-scene ${type}`;
-  scene.setAttribute("aria-hidden", "true");
-  ["scene-sun", "scene-cloud", "scene-rain"].forEach((className) => {
-    const part = document.createElement("i");
-    part.className = className;
-    scene.append(part);
-  });
-  return scene;
+function applyWeatherBackdrop(type) {
+  document.documentElement.dataset.weather = type;
 }
 
 function forecastKey(rawDate) {
@@ -193,7 +185,6 @@ function renderWeatherForecast(forecasts) {
     const day = document.createElement("span");
     day.className = "weather-date";
     day.textContent = date ? `${date.getMonth() + 1}/${date.getDate()}` : "--";
-    const scene = createWeatherScene(weatherType);
     const temperature = document.createElement("span");
     temperature.className = "weather-temp";
     temperature.textContent = `${forecast.forecastMintemp?.value ?? "--"}° — ${forecast.forecastMaxtemp?.value ?? "--"}°`;
@@ -203,7 +194,7 @@ function renderWeatherForecast(forecasts) {
     const description = document.createElement("span");
     description.className = "weather-desc";
     description.textContent = forecast.forecastWeather || "天氣預報";
-    card.append(weekday, day, scene, temperature, rain, description);
+    card.append(weekday, day, temperature, rain, description);
     grid.append(card);
   });
 }
@@ -216,6 +207,8 @@ async function loadWeatherForecast() {
     const data = await response.json();
     const forecasts = Array.isArray(data.weatherForecast) ? data.weatherForecast.slice(0, 7) : [];
     if (!forecasts.length) throw new Error("No weather forecast was returned");
+    const todayForecast = forecasts.find((forecast) => forecastKey(forecast.forecastDate) === dateKey(now)) || forecasts[0];
+    applyWeatherBackdrop(weatherVisualType(todayForecast.forecastWeather));
     renderWeatherForecast(forecasts);
     status.textContent = "香港天文台・已更新";
   } catch (error) {
@@ -339,14 +332,6 @@ function renderCalendar() {
       noteIndicator.title = "此日有備註";
       noteIndicator.setAttribute("aria-label", "此日有備註");
       cell.append(noteIndicator);
-    }
-    if (holiday) {
-      const flag = document.createElement("span");
-      flag.className = "holiday-label";
-      flag.textContent = "紅";
-      flag.title = holiday;
-      flag.setAttribute("aria-label", `紅日：${holiday}`);
-      cell.append(flag);
     }
     if (lunar) {
       const lunarDay = document.createElement("span");
