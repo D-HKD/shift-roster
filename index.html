@@ -33,8 +33,15 @@
       .calendar-day.is-today.is-public-holiday::after { right:31px; background:#caa45a; }
       .detail-holiday { display:block; width:max-content; max-width:100%; margin:-10px 0 14px; padding:3px 7px; overflow:hidden; color:#ffd0d0; background:rgba(216,77,77,.2); border:1px solid rgba(255,171,171,.23); border-radius:999px; text-overflow:ellipsis; white-space:nowrap; font:10px "DM Mono",monospace; }
       .legend-dot.holiday { background:#e36b6b; }
+      .theme-toggle { display:inline-flex; align-items:center; gap:6px; min-height:38px; padding:0 11px; color:var(--navy); background:rgba(255,255,255,.58); border:1px solid #cbd6d6; border-radius:9px; font-size:12px; font-weight:600; transition:.18s ease; }
+      .theme-toggle:hover { background:#edf2f1; }.theme-toggle span:first-child { font-size:15px; line-height:1; }
+      .weather-panel { margin:0 0 22px; padding:19px; background:rgba(255,255,255,.76); border:1px solid rgba(220,228,227,.92); border-radius:var(--radius); box-shadow:0 12px 32px rgba(6,30,53,.045); }
+      .weather-head { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; margin:0 2px 14px; }.weather-head h2 { margin:0; color:var(--navy); font-size:19px; letter-spacing:-.04em; }.weather-head p { margin:3px 0 0; color:var(--grey); font-size:11px; }.weather-status { flex:none; margin-top:3px; color:var(--teal); font:500 9px "DM Mono",monospace; letter-spacing:.08em; }
+      .weather-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:8px; }.weather-day { min-height:125px; padding:12px 9px; color:var(--ink); background:#f7faf9; border:1px solid #e7eeee; border-radius:11px; }.weather-day.is-today { border-color:#8ecbc6; background:#edf8f7; }.weather-day .weather-weekday { display:block; color:var(--grey); font:500 10px "DM Mono",monospace; }.weather-day .weather-date { display:block; margin-top:2px; color:var(--navy); font-size:11px; font-weight:700; }.weather-icon { display:block; margin:10px 0 7px; font-size:24px; line-height:1; }.weather-temp { display:block; color:var(--navy); font:500 13px "DM Mono",monospace; }.weather-temp small { color:var(--grey); font-size:10px; }.weather-rain { display:block; margin-top:5px; color:#5f8eb6; font:10px "DM Mono",monospace; }.weather-desc { display:block; min-height:27px; margin-top:6px; overflow:hidden; color:var(--grey); font-size:9px; line-height:1.35; }.weather-loading,.weather-error { grid-column:1 / -1; padding:11px 2px; color:var(--grey); font-size:12px; }.weather-error { color:#a95656; }
+      :root[data-theme="dark"] { color-scheme:dark; --ink:#e7f1f2; --paper:#071721; --white:#10242f; --teal:#69c7c2; --teal-pale:#163d3c; --gold:#dfbd77; --gold-pale:#423821; --grey:#a8b7be; --line:#28414e; --shadow:0 18px 48px rgba(0,0,0,.24); }
+      :root[data-theme="dark"] body { background:#071721; }:root[data-theme="dark"] .brand, :root[data-theme="dark"] .shift-overview-heading h1, :root[data-theme="dark"] .weather-head h2 { color:#f2f8f8; }:root[data-theme="dark"] .hero-today, :root[data-theme="dark"] .weather-panel, :root[data-theme="dark"] .calendar-card { background:rgba(16,36,47,.88); border-color:#284452; }:root[data-theme="dark"] .calendar-day, :root[data-theme="dark"] .weather-day { color:var(--ink); background:#10232e; border-color:#203a46; }:root[data-theme="dark"] .calendar-day:not(.blank):hover { background:#17313d; border-color:#5c9b99; }:root[data-theme="dark"] .calendar-day.is-selected, :root[data-theme="dark"] .weather-day.is-today { background:#173d3d; border-color:var(--teal); }:root[data-theme="dark"] .calendar-day.is-public-holiday { background:#382126; border-color:#77434d; }:root[data-theme="dark"] .calendar-day.is-public-holiday .day-number { color:#ffaaa8; }:root[data-theme="dark"] .day-number, :root[data-theme="dark"] .calendar-head h2, :root[data-theme="dark"] .weather-day .weather-date, :root[data-theme="dark"] .weather-temp { color:#eaf3f3; }:root[data-theme="dark"] .theme-toggle { color:#edf5f5; background:#102a36; border-color:#3a5662; }:root[data-theme="dark"] .theme-toggle:hover { background:#193743; }:root[data-theme="dark"] .icon-button { color:#e5f0f1; background:#18343f; }:root[data-theme="dark"] .month-tab:hover { background:#18323e; }:root[data-theme="dark"] .admin-panel { color:var(--ink); background:#102c31; border-color:#275a59; }:root[data-theme="dark"] .editor-form { background:#10232e; border-color:#31525b; }:root[data-theme="dark"] .form-grid select, :root[data-theme="dark"] .form-grid input { color:#eaf3f3; background:#0b1a24; border-color:#31505a; }:root[data-theme="dark"] .button-ghost { color:#ebf5f4; border-color:#49606a; }:root[data-theme="dark"] .button-ghost:hover { background:#19313b; }:root[data-theme="dark"] footer { border-color:#28414e; }
       @media (max-width:900px) { .shift-overview { grid-template-columns:170px minmax(0,1fr); }.shift-overview .hero-today { grid-column:2; justify-self:end; margin-top:-2px; }.shift-schedule-grid { grid-column:2; grid-row:1 / span 2; } }
-      @media (max-width:620px) { .shift-overview { grid-template-columns:1fr; gap:14px; padding:13px 1px 24px; }.shift-overview-heading h1 { font-size:32px; }.shift-overview-heading > p:not(.eyebrow) { margin-top:7px; }.shift-schedule-grid { grid-column:auto; grid-row:auto; grid-template-columns:1fr 1fr; gap:7px; }.shift-schedule-card { min-height:70px; grid-template-columns:29px 1fr; column-gap:8px; padding:9px; }.shift-schedule-card .shift-letter { width:29px; height:29px; font-size:14px; }.shift-schedule-card strong { font-size:12px; }.shift-schedule-card time { font-size:10px; }.shift-overview .hero-today { grid-column:auto; justify-self:end; width:max-content; margin:0; }.holiday-label { top:4px; right:4px; padding:1px 3px; font-size:8px; }.calendar-day.is-today.is-public-holiday::after { right:25px; } }
+      @media (max-width:620px) { .topbar-actions { gap:6px; }.theme-toggle { min-height:37px; padding:0 9px; }.shift-overview { grid-template-columns:1fr; gap:14px; padding:13px 1px 24px; }.shift-overview-heading h1 { font-size:32px; }.shift-overview-heading > p:not(.eyebrow) { margin-top:7px; }.shift-schedule-grid { grid-column:auto; grid-row:auto; grid-template-columns:1fr 1fr; gap:7px; }.shift-schedule-card { min-height:70px; grid-template-columns:29px 1fr; column-gap:8px; padding:9px; }.shift-schedule-card .shift-letter { width:29px; height:29px; font-size:14px; }.shift-schedule-card strong { font-size:12px; }.shift-schedule-card time { font-size:10px; }.shift-overview .hero-today { grid-column:auto; justify-self:end; width:max-content; margin:0; }.holiday-label { top:4px; right:4px; padding:1px 3px; font-size:8px; }.calendar-day.is-today.is-public-holiday::after { right:25px; }.weather-panel { margin-bottom:16px; padding:15px; border-radius:15px; }.weather-head { margin-bottom:11px; }.weather-head h2 { font-size:17px; }.weather-status { font-size:8px; }.weather-grid { grid-template-columns:repeat(7,116px); overflow-x:auto; padding-bottom:4px; scrollbar-width:thin; }.weather-day { min-height:116px; } }
     </style>
   </head>
   <body>
@@ -51,6 +58,7 @@
       </a>
       <div class="topbar-actions">
         <span id="sync-status" class="sync-status" aria-live="polite"><span class="status-dot"></span> 示範資料</span>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="切換深色模式"><span id="theme-icon" aria-hidden="true">☾</span><span id="theme-label">深色</span></button>
         <button id="admin-toggle" class="button button-ghost" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.75a5 5 0 0 0-5 5v3H5.75A1.75 1.75 0 0 0 4 12.5v7.75C4 21.22 4.78 22 5.75 22h12.5c.97 0 1.75-.78 1.75-1.75V12.5c0-.97-.78-1.75-1.75-1.75H17v-3a5 5 0 0 0-5-5Zm-3 8v-3a3 3 0 1 1 6 0v3H9Z"/></svg>
           管理員
@@ -76,6 +84,18 @@
           <strong id="today-date">--</strong>
           <span id="today-shift" class="shift-chip muted">未編排</span>
         </div>
+      </section>
+
+      <section class="weather-panel" aria-labelledby="weather-title">
+        <div class="weather-head">
+          <div>
+            <p class="section-kicker">HONG KONG WEATHER</p>
+            <h2 id="weather-title">未來 7 日天氣</h2>
+            <p>香港天文台預報</p>
+          </div>
+          <span id="weather-status" class="weather-status" aria-live="polite">正在讀取…</span>
+        </div>
+        <div id="weather-grid" class="weather-grid" aria-live="polite"><p class="weather-loading">正在讀取未來 7 日天氣…</p></div>
       </section>
 
       <section class="control-row" aria-label="更表控制">
