@@ -13,6 +13,8 @@ const shiftInfo = {
 };
 
 const hkHolidaySource = "https://www.1823.gov.hk/common/ical/tc.json";
+const hkoWeatherSource = "https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=fnd&lang=tc";
+const themeStorageKey = "private-shift-roster-theme";
 const fallbackPublicHolidays = {
   "2025-01-01": "一月一日", "2025-01-29": "農曆年初一", "2025-01-30": "農曆年初二", "2025-01-31": "農曆年初三",
   "2025-04-04": "清明節", "2025-04-18": "耶穌受難節", "2025-04-19": "耶穌受難節翌日", "2025-04-21": "復活節星期一",
@@ -120,6 +122,86 @@ function updateStatus(message, variant = "") {
   status.className = `sync-status ${variant}`;
   status.innerHTML = '<span class="status-dot"></span>';
   status.append(document.createTextNode(` ${message}`));
+}
+
+function weatherEmoji(description = "") {
+  if (/雷暴/.test(description)) return "⛈️";
+  if (/雨|驟雨/.test(description)) return "🌧️";
+  if (/霧/.test(description)) return "🌫️";
+  if (/強風|狂風/.test(description)) return "💨";
+  if (/雲/.test(description)) return "⛅";
+  if (/晴|陽光/.test(description)) return "☀️";
+  return "🌤️";
+}
+
+function forecastKey(rawDate) {
+  if (typeof rawDate !== "string" || !/^\d{8}$/.test(rawDate)) return "";
+  return `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+}
+
+function renderWeatherForecast(forecasts) {
+  const grid = $("#weather-grid");
+  grid.replaceChildren();
+  forecasts.forEach((forecast) => {
+    const key = forecastKey(forecast.forecastDate);
+    const card = document.createElement("article");
+    card.className = "weather-day";
+    if (key === dateKey(now)) card.classList.add("is-today");
+    const date = key ? parseKey(key) : null;
+    const weekday = document.createElement("span");
+    weekday.className = "weather-weekday";
+    weekday.textContent = date ? weekdays[date.getDay()].replace("星期", "週") : "--";
+    const day = document.createElement("span");
+    day.className = "weather-date";
+    day.textContent = date ? `${date.getMonth() + 1}/${date.getDate()}` : "--";
+    const icon = document.createElement("span");
+    icon.className = "weather-icon";
+    icon.textContent = weatherEmoji(forecast.forecastWeather);
+    const temperature = document.createElement("span");
+    temperature.className = "weather-temp";
+    temperature.textContent = `${forecast.forecastMintemp?.value ?? "--"}° — ${forecast.forecastMaxtemp?.value ?? "--"}°`;
+    const rain = document.createElement("span");
+    rain.className = "weather-rain";
+    rain.textContent = `雨量 ${forecast.PSR ?? forecast.forecastPsr ?? "--"}`;
+    const description = document.createElement("span");
+    description.className = "weather-desc";
+    description.textContent = forecast.forecastWeather || "天氣預報";
+    card.append(weekday, day, icon, temperature, rain, description);
+    grid.append(card);
+  });
+}
+
+async function loadWeatherForecast() {
+  const status = $("#weather-status");
+  try {
+    const response = await fetch(hkoWeatherSource, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Weather data returned ${response.status}`);
+    const data = await response.json();
+    const forecasts = Array.isArray(data.weatherForecast) ? data.weatherForecast.slice(0, 7) : [];
+    if (!forecasts.length) throw new Error("No weather forecast was returned");
+    renderWeatherForecast(forecasts);
+    status.textContent = "香港天文台・已更新";
+  } catch (error) {
+    console.warn("Could not load Hong Kong weather forecast:", error);
+    $("#weather-grid").innerHTML = '<p class="weather-error">暫時未能讀取天氣資料，請稍後重新整理。</p>';
+    status.textContent = "暫未能更新";
+  }
+}
+
+function applyTheme(theme) {
+  const isDark = theme === "dark";
+  document.documentElement.dataset.theme = isDark ? "dark" : "light";
+  $("#theme-icon").textContent = isDark ? "☀" : "☾";
+  $("#theme-label").textContent = isDark ? "淺色" : "深色";
+  $("#theme-toggle").setAttribute("aria-label", isDark ? "切換淺色模式" : "切換深色模式");
+  try { localStorage.setItem(themeStorageKey, isDark ? "dark" : "light"); } catch { /* storage unavailable */ }
+}
+
+function initialiseTheme() {
+  let savedTheme = "";
+  try { savedTheme = localStorage.getItem(themeStorageKey) || ""; } catch { /* storage unavailable */ }
+  const systemPrefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  applyTheme(savedTheme || (systemPrefersDark ? "dark" : "light"));
 }
 
 function authErrorText(error) {
@@ -473,10 +555,15 @@ function registerEvents() {
   $("#editor-form").addEventListener("submit", saveDay);
   $("#clear-day").addEventListener("click", clearDay);
   $("#edit-type").addEventListener("change", (event) => applyShiftPreset(event.target.value));
+  $("#theme-toggle").addEventListener("click", () => {
+    applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+  });
 }
 
+initialiseTheme();
 registerEvents();
 state.days = createDemoSchedule(state.year);
 render();
 void loadPublicHolidays();
+void loadWeatherForecast();
 if (configured) startFirebase();
