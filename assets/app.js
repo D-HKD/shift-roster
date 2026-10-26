@@ -65,6 +65,33 @@ function formatDate(key, withYear = true) {
   return `${withYear ? `${date.getFullYear()}年` : ""}${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
+function shortItems(items) {
+  const list = Array.isArray(items) ? items : [items];
+  return list.filter(Boolean).slice(0, 5).join(" · ") || "暫無資料";
+}
+
+function getLunarInfo(key) {
+  try {
+    const Solar = window.Solar;
+    if (!Solar?.fromYmd) return null;
+    const date = parseKey(key);
+    const lunar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate()).getLunar();
+    const lunarMonth = lunar.getMonthInChinese?.() || "";
+    const lunarDay = lunar.getDayInChinese?.() || "";
+    const heavenlyType = lunar.getDayTianShenType?.() || "";
+    const heavenlyLuck = lunar.getDayTianShenLuck?.() || "";
+    return {
+      label: lunarMonth && lunarDay ? `農${lunarMonth}月${lunarDay}` : "農曆",
+      isAuspicious: heavenlyType === "黃道" || heavenlyLuck === "吉",
+      yi: shortItems(lunar.getDayYi?.()),
+      ji: shortItems(lunar.getDayJi?.())
+    };
+  } catch (error) {
+    console.warn("Could not read lunar almanac data:", error);
+    return null;
+  }
+}
+
 function createDemoSchedule(year) {
   const schedule = {};
   const rotation = ["A", "A", "B", "B", "C", "C", "OFF", "OFF", "E"];
@@ -124,14 +151,25 @@ function updateStatus(message, variant = "") {
   status.append(document.createTextNode(` ${message}`));
 }
 
-function weatherEmoji(description = "") {
-  if (/雷暴/.test(description)) return "⛈️";
-  if (/雨|驟雨/.test(description)) return "🌧️";
-  if (/霧/.test(description)) return "🌫️";
-  if (/強風|狂風/.test(description)) return "💨";
-  if (/雲/.test(description)) return "⛅";
-  if (/晴|陽光/.test(description)) return "☀️";
-  return "🌤️";
+function weatherVisualType(description = "") {
+  if (/雷暴/.test(description)) return "storm";
+  if (/雨|驟雨/.test(description)) return "rain";
+  if (/霧/.test(description)) return "fog";
+  if (/雲/.test(description)) return "cloud";
+  if (/晴|陽光/.test(description)) return "sun";
+  return "partly";
+}
+
+function createWeatherScene(type) {
+  const scene = document.createElement("span");
+  scene.className = `weather-scene ${type}`;
+  scene.setAttribute("aria-hidden", "true");
+  ["scene-sun", "scene-cloud", "scene-rain"].forEach((className) => {
+    const part = document.createElement("i");
+    part.className = className;
+    scene.append(part);
+  });
+  return scene;
 }
 
 function forecastKey(rawDate) {
@@ -145,7 +183,8 @@ function renderWeatherForecast(forecasts) {
   forecasts.forEach((forecast) => {
     const key = forecastKey(forecast.forecastDate);
     const card = document.createElement("article");
-    card.className = "weather-day";
+    const weatherType = weatherVisualType(forecast.forecastWeather);
+    card.className = `weather-day weather-${weatherType}`;
     if (key === dateKey(now)) card.classList.add("is-today");
     const date = key ? parseKey(key) : null;
     const weekday = document.createElement("span");
@@ -154,9 +193,7 @@ function renderWeatherForecast(forecasts) {
     const day = document.createElement("span");
     day.className = "weather-date";
     day.textContent = date ? `${date.getMonth() + 1}/${date.getDate()}` : "--";
-    const icon = document.createElement("span");
-    icon.className = "weather-icon";
-    icon.textContent = weatherEmoji(forecast.forecastWeather);
+    const scene = createWeatherScene(weatherType);
     const temperature = document.createElement("span");
     temperature.className = "weather-temp";
     temperature.textContent = `${forecast.forecastMintemp?.value ?? "--"}° — ${forecast.forecastMaxtemp?.value ?? "--"}°`;
@@ -166,7 +203,7 @@ function renderWeatherForecast(forecasts) {
     const description = document.createElement("span");
     description.className = "weather-desc";
     description.textContent = forecast.forecastWeather || "天氣預報";
-    card.append(weekday, day, icon, temperature, rain, description);
+    card.append(weekday, day, scene, temperature, rain, description);
     grid.append(card);
   });
 }
@@ -257,6 +294,7 @@ function renderCalendar() {
   const totalCells = Math.ceil((first.getDay() + monthLength) / 7) * 7;
   const counts = { A: 0, B: 0, C: 0, E: 0, OFF: 0 };
   let holidayCount = 0;
+  let noteCount = 0;
 
   for (let index = 0; index < totalCells; index += 1) {
     const dayNumber = index - first.getDay() + 1;
@@ -274,21 +312,34 @@ function renderCalendar() {
     const key = dateKey(date);
     const day = getDay(key);
     const holiday = getPublicHoliday(key);
+    const lunar = getLunarInfo(key);
+    const hasNote = Boolean(day?.note?.trim());
     if (key === state.selectedKey) cell.classList.add("is-selected");
     if (key === dateKey(now)) cell.classList.add("is-today");
     if (day?.type === "OFF") cell.classList.add("off-day");
+    if (hasNote) {
+      cell.classList.add("has-note");
+      noteCount += 1;
+    }
     if (holiday) {
       cell.classList.add("is-public-holiday");
       holidayCount += 1;
     }
     if (day?.type) counts[day.type] += 1;
     cell.setAttribute("role", "gridcell");
-    cell.setAttribute("aria-label", `${formatDate(key)}，${holiday ? `紅日：${holiday}，` : ""}${day ? shiftInfo[day.type].name : "未編排"}`);
+    cell.setAttribute("aria-label", `${formatDate(key)}，${holiday ? `紅日：${holiday}，` : ""}${hasNote ? "有備註，" : ""}${lunar?.isAuspicious ? "黃道吉日，" : ""}${day ? shiftInfo[day.type].name : "未編排"}`);
 
     const number = document.createElement("span");
     number.className = "day-number";
     number.textContent = dayNumber;
     cell.append(number);
+    if (hasNote) {
+      const noteIndicator = document.createElement("span");
+      noteIndicator.className = "note-indicator";
+      noteIndicator.title = "此日有備註";
+      noteIndicator.setAttribute("aria-label", "此日有備註");
+      cell.append(noteIndicator);
+    }
     if (holiday) {
       const flag = document.createElement("span");
       flag.className = "holiday-label";
@@ -296,6 +347,13 @@ function renderCalendar() {
       flag.title = holiday;
       flag.setAttribute("aria-label", `紅日：${holiday}`);
       cell.append(flag);
+    }
+    if (lunar) {
+      const lunarDay = document.createElement("span");
+      lunarDay.className = `lunar-day${lunar.isAuspicious ? " is-auspicious" : ""}`;
+      lunarDay.textContent = `${lunar.label}${lunar.isAuspicious ? " · 吉" : ""}`;
+      lunarDay.title = lunar.isAuspicious ? "傳統黃曆：黃道吉日" : "傳統農曆日期";
+      cell.append(lunarDay);
     }
     if (day) {
       const shift = document.createElement("span");
@@ -337,6 +395,15 @@ function renderCalendar() {
     item.append(pill, document.createTextNode(`${holidayCount}日`));
     summary.append(item);
   }
+  if (noteCount) {
+    const item = document.createElement("span");
+    item.className = "summary-item";
+    const pill = document.createElement("b");
+    pill.className = "summary-pill";
+    pill.textContent = "備";
+    item.append(pill, document.createTextNode(`${noteCount}日`));
+    summary.append(item);
+  }
 }
 
 function renderDetails() {
@@ -348,6 +415,17 @@ function renderDetails() {
   const holidayText = $("#detail-holiday");
   holidayText.hidden = !holiday;
   holidayText.textContent = holiday ? `紅日 · ${holiday}` : "";
+  const lunar = getLunarInfo(state.selectedKey);
+  const almanac = $("#lunar-almanac");
+  almanac.hidden = !lunar;
+  if (lunar) {
+    $("#lunar-date").textContent = `${lunar.label} · 傳統黃曆`;
+    const luck = $("#lunar-luck");
+    luck.textContent = lunar.isAuspicious ? "黃道 · 吉" : "黃曆參考";
+    luck.classList.toggle("is-caution", !lunar.isAuspicious);
+    $("#lunar-yi").textContent = lunar.yi;
+    $("#lunar-ji").textContent = lunar.ji;
+  }
   const visual = $("#detail-shift-visual");
   const letter = visual.querySelector(".detail-shift-letter");
   if (!day) {
