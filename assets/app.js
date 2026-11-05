@@ -978,6 +978,8 @@ function renderCalendar() {
     cell.addEventListener("click", () => {
       state.selectedKey = key;
       render();
+      // 管理員點一下日期就開快速輸入，直接按 A／B／C／E／L 即發布
+      if (state.isOwner) openQuickEntry(key);
     });
     grid.append(cell);
   }
@@ -1063,6 +1065,8 @@ function renderToday() {
 function renderEditor() {
   const form = $("#editor-form");
   form.hidden = !state.isOwner;
+  const hint = $("#quick-hint-inline");
+  if (hint) hint.hidden = !state.isOwner;
   $("#sign-in").hidden = Boolean(state.user);
   $("#sign-out").hidden = !state.user;
   const message = $("#admin-message");
@@ -1227,6 +1231,173 @@ function applyShiftPreset(type) {
   $("#edit-end").value = defaults.end;
 }
 
+/* ---------- 快速輸入：點一日 → 按 A／B／C／E／L 即時發布 ---------- */
+
+const quickTypeByKey = { A: "A", B: "B", C: "C", E: "E", L: "OFF" };
+let toastTimer = 0;
+
+function toast(message, variant = "") {
+  const element = $("#toast");
+  if (!element) return;
+  element.textContent = message;
+  element.className = `toast${variant ? ` ${variant}` : ""} is-visible`;
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => element.classList.remove("is-visible"), 2400);
+}
+
+function shortDate(key) {
+  const date = parseKey(key);
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+function quickSheetIsOpen() {
+  const sheet = $("#quick-sheet");
+  return Boolean(sheet && !sheet.hidden);
+}
+
+function shiftLabel(type) {
+  return type === "OFF" ? "L 休息日" : `${type} 更`;
+}
+
+function renderQuickSheet() {
+  const key = state.selectedKey;
+  const date = parseKey(key);
+  const day = getDay(key);
+  const holiday = getPublicHoliday(key);
+  $("#quick-title").textContent = `${date.getMonth() + 1}月${date.getDate()}日 · ${weekdays[date.getDay()]}`;
+  $("#quick-date").textContent = [`${date.getFullYear()}年`, holiday].filter(Boolean).join(" · ");
+  $("#quick-current").textContent = day
+    ? `${shiftLabel(day.type)} · ${timeText(day)}${day.note?.trim() ? ` · ${day.note.trim()}` : ""}`
+    : "這日未編排：揀一個更份就會即刻發布。";
+  $("#quick-note-input").value = day?.note || "";
+  $("#quick-save-note").disabled = !day;
+  document.querySelectorAll(".quick-key").forEach((button) => {
+    button.classList.toggle("is-active", Boolean(day && button.dataset.shift === day.type));
+  });
+}
+
+function openQuickEntry(key = state.selectedKey) {
+  if (!state.isOwner || !state.firebase) return;
+  const sheet = $("#quick-sheet");
+  if (!sheet) return;
+  state.selectedKey = key;
+  renderQuickSheet();
+  sheet.hidden = false;
+  document.body.classList.add("quick-open");
+  window.setTimeout(() => $(".quick-card")?.focus({ preventScroll: true }), 40);
+}
+
+function closeQuickEntry() {
+  const sheet = $("#quick-sheet");
+  if (!sheet) return;
+  sheet.hidden = true;
+  document.body.classList.remove("quick-open");
+}
+
+function setDayLocally(key, day) {
+  state.days = { ...state.days, [key]: day };
+  render();
+}
+
+function restoreDayLocally(key, previous) {
+  const next = { ...state.days };
+  if (previous) next[key] = previous;
+  else delete next[key];
+  state.days = next;
+  render();
+}
+
+// 只寫入指定一日，避免整份 days 覆蓋其他裝置同時做的修改
+async function publishDay(key, day) {
+  const { doc, updateDoc, setDoc, serverTimestamp, db } = state.firebase;
+  const ref = doc(db, "rosters", String(state.year));
+  try {
+    await updateDoc(ref, {
+      [`days.${key}`]: day,
+      updatedAt: serverTimestamp(),
+      updatedBy: state.user.uid
+    });
+  } catch (error) {
+    // 年份文件未建立（或環境不支援點號路徑）時，改用整份 days 合併寫入
+    const code = error?.code || "";
+    if (code !== "not-found" && code !== "invalid-argument") throw error;
+    await setDoc(ref, {
+      year: state.year,
+      days: { ...state.days, [key]: day },
+      updatedAt: serverTimestamp(),
+      updatedBy: state.user.uid
+    }, { merge: true });
+  }
+}
+
+async function applyQuickShift(type) {
+  if (!state.isOwner || !state.firebase) return;
+  const key = state.selectedKey;
+  const previous = getDay(key);
+  const defaults = shiftInfo[type];
+  const keepTimes = Boolean(previous && previous.type === type);
+  const day = {
+    type,
+    start: type === "OFF" ? "" : (keepTimes ? previous.start : defaults.start),
+    end: type === "OFF" ? "" : (keepTimes ? previous.end : defaults.end),
+    note: ($("#quick-note-input")?.value || "").trim()
+  };
+  closeQuickEntry();
+  setDayLocally(key, day);
+  try {
+    await publishDay(key, day);
+    toast(`${shortDate(key)} · ${shiftLabel(type)} 已發布`);
+  } catch (error) {
+    console.error("Quick save failed:", error);
+    restoreDayLocally(key, previous);
+    toast("未能發布，請檢查網絡或登入狀態", "error");
+  }
+}
+
+async function saveQuickNote() {
+  if (!state.isOwner || !state.firebase) return;
+  const key = state.selectedKey;
+  const previous = getDay(key);
+  if (!previous) {
+    toast("請先揀一個更份，再儲存備註");
+    return;
+  }
+  const note = ($("#quick-note-input")?.value || "").trim();
+  const day = { ...previous, note };
+  closeQuickEntry();
+  setDayLocally(key, day);
+  try {
+    await publishDay(key, day);
+    toast(note ? "備註已儲存" : "備註已清除");
+  } catch (error) {
+    console.error("Saving note failed:", error);
+    restoreDayLocally(key, previous);
+    toast("未能儲存備註", "error");
+  }
+}
+
+function handleQuickKeys(event) {
+  if (!quickSheetIsOpen()) return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeQuickEntry();
+    return;
+  }
+  const target = event.target;
+  if (target instanceof HTMLElement && target.closest("input, textarea, select")) {
+    if (event.key === "Enter" && target.id === "quick-note-input") {
+      event.preventDefault();
+      void saveQuickNote();
+    }
+    return;
+  }
+  const type = quickTypeByKey[event.key.toUpperCase()];
+  if (!type) return;
+  event.preventDefault();
+  void applyQuickShift(type);
+}
+
 function registerEvents() {
   $("#previous-year").addEventListener("click", () => switchYear(state.year - 1));
   $("#next-year").addEventListener("click", () => switchYear(state.year + 1));
@@ -1242,6 +1413,20 @@ function registerEvents() {
   $("#clear-day").addEventListener("click", clearDay);
   $("#edit-type").addEventListener("change", (event) => applyShiftPreset(event.target.value));
   $("#theme-toggle").addEventListener("click", toggleTheme);
+  $("#quick-close").addEventListener("click", closeQuickEntry);
+  $(".quick-backdrop")?.addEventListener("click", closeQuickEntry);
+  document.querySelectorAll(".quick-key").forEach((button) => {
+    button.addEventListener("click", () => { void applyQuickShift(button.dataset.shift); });
+  });
+  $("#quick-save-note").addEventListener("click", () => { void saveQuickNote(); });
+  $("#quick-more").addEventListener("click", () => {
+    closeQuickEntry();
+    const panel = $("#admin-panel");
+    panel.hidden = false;
+    renderEditor();
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  document.addEventListener("keydown", handleQuickKeys);
 }
 
 initialiseTheme();
