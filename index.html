@@ -788,6 +788,7 @@
             </div>
             <div id="calendar-summary" class="calendar-summary"></div>
           </div>
+          <p id="quick-hint-inline" class="quick-hint-inline" hidden>管理員模式：點任何日期 → 按 A／B／C／E／L 即時發布，毋須再按儲存。</p>
           <div class="weekdays" aria-hidden="true">
             <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
           </div>
@@ -857,6 +858,48 @@
           </div>
         </form>
       </section>
+
+      <div id="quick-sheet" class="quick-sheet" hidden>
+        <div class="quick-backdrop" data-quick-close></div>
+        <section class="quick-card" role="dialog" aria-modal="true" aria-labelledby="quick-title" aria-describedby="quick-current" tabindex="-1">
+          <header class="quick-head">
+            <div>
+              <p class="section-kicker">QUICK ENTRY</p>
+              <h2 id="quick-title">--</h2>
+              <p id="quick-date" class="quick-date">--</p>
+              <p id="quick-current" class="quick-current">未編排</p>
+            </div>
+            <button id="quick-close" class="quick-close" type="button" aria-label="關閉快速輸入">✕</button>
+          </header>
+          <div class="quick-keys" role="group" aria-label="選擇更份">
+            <button class="quick-key a" data-shift="A" type="button">
+              <span class="quick-key-letter">A</span><span class="quick-key-name">早更</span><span class="quick-key-time">07:30–17:06</span><kbd>A</kbd>
+            </button>
+            <button class="quick-key b" data-shift="B" type="button">
+              <span class="quick-key-letter">B</span><span class="quick-key-name">下午更</span><span class="quick-key-time">15:30–01:06</span><kbd>B</kbd>
+            </button>
+            <button class="quick-key c" data-shift="C" type="button">
+              <span class="quick-key-letter">C</span><span class="quick-key-name">夜更</span><span class="quick-key-time">22:30–08:06</span><kbd>C</kbd>
+            </button>
+            <button class="quick-key e" data-shift="E" type="button">
+              <span class="quick-key-letter">E</span><span class="quick-key-name">日更</span><span class="quick-key-time">08:30–18:06</span><kbd>E</kbd>
+            </button>
+            <button class="quick-key off" data-shift="OFF" type="button">
+              <span class="quick-key-letter">L</span><span class="quick-key-name">休息日</span><span class="quick-key-time">全日休息</span><kbd>L</kbd>
+            </button>
+          </div>
+          <label class="quick-note" for="quick-note-input">備註（可選）
+            <input id="quick-note-input" type="text" maxlength="70" placeholder="例如：調更／特別安排" autocomplete="off" />
+          </label>
+          <div class="quick-footer">
+            <button id="quick-save-note" class="button button-ghost" type="button">只儲存備註</button>
+            <button id="quick-more" class="text-button" type="button">自訂時間／其他設定</button>
+          </div>
+          <p class="quick-hint">揀完即自動發布，毋須再按儲存。鍵盤：A／B／C／E = 更份，L = 休息日，Esc 關閉。</p>
+        </section>
+      </div>
+
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
       <section class="guide-strip">
         <div><span class="guide-no">01</span><p><strong>選擇月份</strong>點選上方月份，即可查看該月安排。</p></div>
