@@ -95,3 +95,18 @@ body.quick-open { overflow:hidden; }
 
 @media (max-width: 850px) { .roster-layout { grid-template-columns:1fr; }.detail-card { min-height:230px; }.legend { margin-top:18px; }.admin-panel { grid-template-columns:1fr; gap:18px; }.admin-actions { margin-top:11px; } }
 @media (max-width: 620px) { .topbar { height:68px; padding:0 17px; }.topbar-actions { gap:8px; }.sync-status { display:none; }.button-ghost { min-height:37px; padding:0 11px; font-size:12px; }.shell { padding:17px 15px 34px; }.hero { min-height:0; align-items:flex-start; gap:12px; padding:11px 1px 25px; }.hero h1 { font-size:37px; }.hero-copy { margin-top:12px; font-size:12px; }.hero-today { min-width:82px; padding:10px; }.hero-today strong { font-size:15px; }.control-row { align-items:flex-start; flex-direction:column; gap:8px; padding-bottom:14px; }.month-tabs { width:100%; max-width:none; order:2; }.month-tab { width:36px; }.calendar-card { padding:16px 10px 10px; border-radius:15px; }.calendar-head { padding:0 6px; margin-bottom:13px; }.calendar-head h2 { font-size:21px; }.calendar-summary { max-width:150px; }.summary-item { font-size:9px; }.calendar-grid { gap:3px; }.calendar-day { min-height:57px; padding:5px 3px; border-radius:7px; }.calendar-day.is-selected { padding:4px 2px; }.day-shift { justify-content:center; margin-top:5px; }.shift-code { width:22px; height:19px; }.shift-time { display:none; }.weekdays span { font-size:9px; }.detail-card { padding:19px; border-radius:15px; }.detail-card h2 { margin-bottom:13px; }.admin-panel { margin-top:15px; padding:18px; border-radius:15px; }.form-grid { grid-template-columns:1fr 1fr; }.form-grid label:first-child,.form-grid .note-field { grid-column:span 2; }.editor-head { display:block; }.editor-head span { display:block; margin-top:4px; text-align:left; }.guide-strip { grid-template-columns:1fr; gap:14px; margin-top:31px; } footer { display:block; padding:16px 15px 23px; line-height:1.7; } footer span { display:block; } }
+
+/* ---------- 更簿連結：每日實際當值 ---------- */
+.day-actual {
+  display: block;
+  margin-top: 3px;
+  color: #0d7a6c;
+  font: 600 9px "DM Mono", monospace;
+  letter-spacing: .02em;
+  line-height: 1.3;
+}
+.day-actual.is-ot { color: #b5761a; }
+@media (max-width: 620px) {
+  .calendar-day { min-height: 62px; }
+  .day-actual { margin-top: 2px; font-size: 8.5px; }
+}
