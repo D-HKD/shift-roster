@@ -169,6 +169,63 @@ function timeText(day) {
   return `${day.start} — ${day.end}`;
 }
 
+/* ---------- 跟「更簿」連結：讀同一網域嘅實際當值紀錄 ---------- */
+const GENG_BO_KEY = "gengbo.v1";
+
+function gengBoActual() {
+  let data = null;
+  try {
+    const raw = localStorage.getItem(GENG_BO_KEY);
+    if (raw) data = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (!data || !Array.isArray(data.entries)) return {};
+
+  const events = data.entries
+    .filter((e) => e && (e.t === "on" || e.t === "off"))
+    .sort((a, b) => a.s - b.s);
+  const sessions = [];
+  let open = null;
+  for (const e of events) {
+    if (e.t === "on") {
+      if (open != null) sessions.push([open, e.s]);
+      open = e.s;
+    } else if (e.t === "off" && open != null) {
+      sessions.push([open, e.s]);
+      open = null;
+    }
+  }
+  if (open != null) sessions.push([open, Date.now()]);
+
+  const byDay = {};
+  for (const [start, end] of sessions) {
+    const key = dateKey(new Date(start));
+    byDay[key] = (byDay[key] || 0) + Math.max(0, end - start);
+  }
+
+  const out = {};
+  for (const key of Object.keys(byDay)) {
+    const day = state.days[key];
+    let target = 0;
+    if (day && day.type !== "OFF" && day.start && day.end) {
+      const [sh, sm] = day.start.split(":").map(Number);
+      const [eh, em] = day.end.split(":").map(Number);
+      let mins = eh * 60 + em - (sh * 60 + sm);
+      if (mins <= 0) mins += 1440;
+      target = mins * 60000;
+    }
+    out[key] = { ms: byDay[key], ot: Math.max(0, byDay[key] - target) };
+  }
+  return out;
+}
+
+function shortDur(ms) {
+  const m = Math.round(ms / 60000);
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+}
+
+
 function updateStatus(message, variant = "") {
   const status = $("#sync-status");
   status.className = `sync-status ${variant}`;
@@ -909,6 +966,7 @@ function renderCalendar() {
   const monthLength = new Date(state.year, state.month + 1, 0).getDate();
   const totalCells = Math.ceil((first.getDay() + monthLength) / 7) * 7;
   const counts = { A: 0, B: 0, C: 0, E: 0, OFF: 0 };
+  const actualByDay = gengBoActual();
   let holidayCount = 0;
   let noteCount = 0;
 
@@ -975,6 +1033,14 @@ function renderCalendar() {
       shift.append(code, time);
       cell.append(shift);
     }
+    const actual = actualByDay[key];
+    if (actual) {
+      const badge = document.createElement("span");
+      badge.className = `day-actual${actual.ot > 0 ? " is-ot" : ""}`;
+      badge.textContent = actual.ot > 0 ? `+${shortDur(actual.ot)}` : shortDur(actual.ms);
+      badge.title = `更簿實際當值 ${shortDur(actual.ms)} 小時${actual.ot > 0 ? `，OT ${shortDur(actual.ot)}` : ""}`;
+      cell.append(badge);
+    }
     cell.addEventListener("click", () => {
       state.selectedKey = key;
       render();
@@ -1038,17 +1104,21 @@ function renderDetails() {
   }
   const visual = $("#detail-shift-visual");
   const letter = visual.querySelector(".detail-shift-letter");
+  const actual = gengBoActual()[state.selectedKey];
   if (!day) {
     visual.className = "detail-shift-visual is-empty";
     letter.textContent = "—";
     $("#detail-shift-name").textContent = "未編排";
-    $("#detail-shift-time").textContent = "尚未設定更份";
+    $("#detail-shift-time").textContent = actual
+      ? `尚未設定更份 · 實際當值 ${shortDur(actual.ms)}`
+      : "尚未設定更份";
     $("#detail-note").textContent = "這天暫時未有工作安排。";
   } else {
     visual.className = `detail-shift-visual ${shiftInfo[day.type].className}`;
     letter.textContent = day.type === "OFF" ? "休" : day.type;
     $("#detail-shift-name").textContent = shiftInfo[day.type].name;
-    $("#detail-shift-time").textContent = timeText(day);
+    $("#detail-shift-time").textContent = timeText(day) +
+      (actual ? ` · 實際 ${shortDur(actual.ms)}${actual.ot > 0 ? `（OT +${shortDur(actual.ot)}）` : ""}` : "");
     $("#detail-note").textContent = day.note?.trim() || (day.type === "OFF" ? "好好休息。" : "沒有額外備註。");
   }
   $("#editor-date").textContent = `${formatDate(state.selectedKey)} · ${weekdays[date.getDay()]}`;
@@ -1460,6 +1530,14 @@ window.setInterval(() => {
 window.addEventListener("focus", () => { void loadCurrentWeather(); });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) void loadCurrentWeather();
+});
+
+// 更簿（另一個分頁）打卡後，即刻更新日曆上嘅實際時數
+window.addEventListener("storage", (event) => {
+  if (event.key === GENG_BO_KEY) render();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) render();
 });
 
 if (configured) startFirebase();
