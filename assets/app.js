@@ -85,6 +85,13 @@ const state = {
   isOwner: false,
   firebase: null,
   unsubscribe: null,
+  loading: configured,
+  loadError: false,
+  fromCache: false,
+  slowSync: false,
+  lastSync: null,
+  updatedAt: null,
+  lastSnapshotAt: 0,
   publicHolidays: { ...publicHolidayTable },
   forecasts: [],
   weather: null,
@@ -231,6 +238,67 @@ function updateStatus(message, variant = "") {
   status.className = `sync-status ${variant}`;
   status.innerHTML = '<span class="status-dot"></span>';
   status.append(document.createTextNode(` ${message}`));
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+// 只顯示「時:分」，唔係今日就補上日期，避免睇錯新舊
+function formatStamp(input) {
+  if (!input) return "";
+  const date = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(date.getTime())) return "";
+  const time = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  const today = new Date();
+  const sameDay = date.getFullYear() === today.getFullYear()
+    && date.getMonth() === today.getMonth()
+    && date.getDate() === today.getDate();
+  return sameDay ? time : `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+}
+
+// 任何時候都講清楚畫面上嘅資料係「最新同步」定「本機快取／離線」
+function renderDataState() {
+  const banner = $("#data-banner");
+  if (!banner) return;
+  const text = $("#data-banner-text");
+  const retry = $("#data-banner-retry");
+  retry.hidden = true;
+  banner.hidden = false;
+
+  if (!configured) {
+    banner.dataset.state = "demo";
+    text.textContent = "示範模式：未連接 Firebase，以下只係示範資料。";
+  } else if (state.loading) {
+    banner.dataset.state = "loading";
+    text.textContent = "正在讀取最新更表…";
+  } else if (state.loadError) {
+    banner.dataset.state = "error";
+    text.textContent = "未能讀取更表。請檢查網絡後重試。";
+    retry.hidden = false;
+  } else if (!navigator.onLine) {
+    banner.dataset.state = "stale";
+    text.textContent = `離線：以下係本機儲存嘅資料${state.lastSync ? `（最後同步 ${formatStamp(state.lastSync)}）` : ""}，可能未係最新。`;
+    retry.hidden = false;
+  } else if (state.fromCache) {
+    banner.dataset.state = "stale";
+    text.textContent = state.slowSync
+      ? `未能連接伺服器，顯示本機資料${state.lastSync ? `（最後同步 ${formatStamp(state.lastSync)}）` : ""}。`
+      : `正在同步，暫時顯示本機資料${state.lastSync ? `（${formatStamp(state.lastSync)}）` : ""}…`;
+    retry.hidden = !state.slowSync;
+  } else {
+    banner.hidden = true;
+  }
+
+  const updated = $("#calendar-updated");
+  if (updated) {
+    const source = state.updatedAt || state.lastSync;
+    if (!source) {
+      updated.textContent = configured ? "" : "示範資料";
+    } else {
+      updated.textContent = `更表更新於 ${formatStamp(source)}${state.fromCache && !state.loading ? " · 本機快取" : ""}`;
+    }
+  }
 }
 
 function weatherVisualType(description = "") {
@@ -1112,7 +1180,7 @@ function renderDetails() {
     $("#detail-shift-time").textContent = actual
       ? `尚未設定更份 · 實際當值 ${shortDur(actual.ms)}`
       : "尚未設定更份";
-    $("#detail-note").textContent = "這天暫時未有工作安排。";
+    $("#detail-note").textContent = state.loading ? "正在讀取更表…" : "這天暫時未有工作安排。";
   } else {
     visual.className = `detail-shift-visual ${shiftInfo[day.type].className}`;
     letter.textContent = day.type === "OFF" ? "休" : day.type;
@@ -1126,8 +1194,13 @@ function renderDetails() {
 
 function renderToday() {
   $("#today-date").textContent = `${now.getMonth() + 1}/${now.getDate()}`;
-  const today = getDay(dateKey(now));
   const chip = $("#today-shift");
+  if (state.loading) {
+    chip.textContent = "讀取中…";
+    chip.classList.add("muted");
+    return;
+  }
+  const today = getDay(dateKey(now));
   chip.textContent = today ? (today.type === "OFF" ? "休息日" : `${today.type} 更`) : "未編排";
   chip.classList.toggle("muted", !today);
 }
@@ -1165,21 +1238,47 @@ function render() {
   renderDetails();
   renderToday();
   renderEditor();
+  renderDataState();
 }
 
 async function subscribeRoster() {
   if (!state.firebase) return;
   state.unsubscribe?.();
-  updateStatus("正在載入…");
+  if (!state.lastSnapshotAt) {
+    state.loading = true;
+    render();
+  }
+  updateStatus("正在同步…");
   const { db, doc, onSnapshot } = state.firebase;
   state.unsubscribe = onSnapshot(doc(db, "rosters", String(state.year)), (snapshot) => {
-    state.days = snapshot.exists() ? (snapshot.data().days || {}) : {};
-    updateStatus(snapshot.metadata.fromCache ? "離線快取" : "已同步", "live");
+    const data = snapshot.exists() ? snapshot.data() : null;
+    state.days = data?.days || {};
+    state.updatedAt = data?.updatedAt?.toDate?.() || null;
+    state.loading = false;
+    state.loadError = false;
+    state.fromCache = snapshot.metadata.fromCache;
+    state.slowSync = false;
+    state.lastSync = new Date();
+    state.lastSnapshotAt = Date.now();
+    if (state.fromCache) {
+      // 只係讀到本機快取：6 秒內未收到伺服器版本就當連唔到
+      window.setTimeout(() => {
+        if (!state.fromCache) return;
+        state.slowSync = true;
+        renderDataState();
+      }, 6000);
+    }
+    updateStatus(
+      state.fromCache ? `本機快取 · ${formatStamp(state.lastSync)}` : `已同步 · ${formatStamp(state.lastSync)}`,
+      state.fromCache ? "" : "live"
+    );
     render();
+    startWeatherOnce();
   }, (error) => {
     console.error("Could not load roster:", error);
-    state.days = {};
-    updateStatus("未能讀取資料", "error");
+    state.loading = false;
+    state.loadError = true;
+    updateStatus("未能讀取", "error");
     render();
   });
 }
@@ -1187,43 +1286,82 @@ async function subscribeRoster() {
 async function switchYear(year) {
   state.year = year;
   state.selectedKey = dateKey(new Date(year, state.month, 1));
-  if (state.mode === "demo") {
+  if (state.mode === "demo" && !configured) {
     state.days = createDemoSchedule(year);
     render();
   } else {
+    // 換年先清空，避免一時顯示上一年嘅更份
+    state.days = {};
+    state.updatedAt = null;
+    state.loading = true;
+    render();
     await subscribeRoster();
   }
 }
 
+let weatherStarted = false;
+
+// 天氣只係裝飾，等更表出咗先開始讀，唔好同 Firestore 爭頻寬
+function startWeatherOnce() {
+  if (weatherStarted) return;
+  weatherStarted = true;
+  void loadWeatherForecast();
+  void loadCurrentWeather();
+}
+
 async function startFirebase() {
   try {
-    const [{ initializeApp }, firestore, auth] = await Promise.all([
+    const [{ initializeApp }, firestore] = await Promise.all([
       import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js"),
-      import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),
-      import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js")
+      import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")
     ]);
     const app = initializeApp(firebaseConfig);
-    const db = firestore.getFirestore(app);
-    const authInstance = auth.getAuth(app);
-    state.firebase = { ...firestore, ...auth, db, authInstance };
+    let db;
+    try {
+      // 用 IndexedDB 做本機快取：再開網站可以即刻顯示上次嘅更表，離線都睇到
+      db = firestore.initializeFirestore(app, {
+        localCache: firestore.persistentLocalCache({
+          tabManager: firestore.persistentMultipleTabManager()
+        })
+      });
+    } catch (error) {
+      console.warn("Persistent cache unavailable, fall back to memory cache:", error);
+      db = firestore.getFirestore(app);
+    }
+    state.firebase = { ...firestore, db };
     state.mode = "cloud";
+    await subscribeRoster();
+    // 登入模組唔阻住更表顯示
+    void startAuth(app);
+  } catch (error) {
+    console.error("Firebase initialisation failed:", error);
+    state.loading = false;
+    state.loadError = true;
+    updateStatus("未能連線", "error");
+    render();
+  }
+}
+
+async function startAuth(app) {
+  try {
+    const auth = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js");
+    const authInstance = auth.getAuth(app);
+    state.firebase = { ...state.firebase, ...auth, authInstance };
     auth.onAuthStateChanged(authInstance, (user) => {
       state.user = user;
       state.isOwner = Boolean(user && validOwner && user.uid === ADMIN_UID);
       renderEditor();
     });
-    await subscribeRoster();
   } catch (error) {
-    console.error("Firebase initialisation failed:", error);
-    state.mode = "demo";
-    state.days = createDemoSchedule(state.year);
-    updateStatus("設定需要檢查", "error");
-    render();
+    console.error("Auth module failed to load:", error);
   }
 }
 
 async function signIn() {
-  if (!state.firebase) return;
+  if (!state.firebase?.signInWithPopup || !state.firebase?.authInstance) {
+    $("#admin-message").textContent = "登入功能仲載入緊，請等一秒再撳。";
+    return;
+  }
   const { GoogleAuthProvider, signInWithPopup, authInstance } = state.firebase;
   try {
     $("#admin-message").textContent = "正在開啟 Google 登入…";
@@ -1496,12 +1634,25 @@ function registerEvents() {
     renderEditor();
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+  $("#data-banner-retry").addEventListener("click", () => {
+    if (!state.firebase) {
+      location.reload();
+      return;
+    }
+    state.loadError = false;
+    state.loading = true;
+    render();
+    void subscribeRoster();
+  });
   document.addEventListener("keydown", handleQuickKeys);
 }
 
 initialiseTheme();
 registerEvents();
-state.days = createDemoSchedule(state.year);
+// 連線模式一開始唔用示範資料，避免未同步就俾人睇到假更份
+state.days = configured ? {} : createDemoSchedule(state.year);
+if (!configured) updateStatus("示範資料");
+window.__lunarReady = () => { render(); };
 render();
 
 // 未拿到真實天氣之前，先按時間畫一個合理的天色，避免背景一片死板
@@ -1519,8 +1670,12 @@ if (previewNow) {
   if (!state.themePreference) applyTheme(resolveTheme());
 }
 
-void loadWeatherForecast();
-void loadCurrentWeather();
+// 示範模式即刻載入天氣；連線模式就等更表同步完先，避免爭頻寬（最多等 5 秒）
+if (!configured) {
+  startWeatherOnce();
+} else {
+  window.setTimeout(startWeatherOnce, 5000);
+}
 
 // 天氣每 10 分鐘更新一次；回到畫面時亦重新讀取（涵蓋跨日、下班回家等情況）
 window.setInterval(() => {
@@ -1539,5 +1694,16 @@ window.addEventListener("storage", (event) => {
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) render();
 });
+
+// 由背景返嚟、bfcache 還原或重新連線時，主動再同步一次，避免停咗喺舊更表
+function refreshRosterIfStale() {
+  if (state.mode !== "cloud" || !state.firebase) return;
+  if (Date.now() - state.lastSnapshotAt < 15000) return;
+  void subscribeRoster();
+}
+window.addEventListener("pageshow", (event) => { if (event.persisted) refreshRosterIfStale(); });
+window.addEventListener("online", () => { state.loadError = false; refreshRosterIfStale(); renderDataState(); });
+window.addEventListener("offline", () => renderDataState());
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshRosterIfStale(); });
 
 if (configured) startFirebase();
