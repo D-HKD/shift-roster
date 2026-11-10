@@ -8,8 +8,13 @@
     <title>私人更表</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="dns-prefetch" href="https://data.weather.gov.hk" />
+    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin />
+    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+HK:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="assets/styles.css" />
+    <link rel="stylesheet" href="assets/styles.css?v=20261110" />
     <style>
       .shift-overview { display:grid; grid-template-columns:205px minmax(0,1fr) 136px; align-items:stretch; gap:22px; padding:22px 3px 28px; }
       .shift-overview-heading { display:flex; flex-direction:column; justify-content:center; }
@@ -719,7 +724,7 @@
         </span>
       </a>
       <div class="topbar-actions">
-        <span id="sync-status" class="sync-status" aria-live="polite"><span class="status-dot"></span> 示範資料</span>
+        <span id="sync-status" class="sync-status" aria-live="polite"><span class="status-dot"></span> 連線中…</span>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="切換深色模式"><span id="theme-icon" aria-hidden="true">☾</span><span id="theme-label">深色</span></button>
         <button id="admin-toggle" class="button button-ghost" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.75a5 5 0 0 0-5 5v3H5.75A1.75 1.75 0 0 0 4 12.5v7.75C4 21.22 4.78 22 5.75 22h12.5c.97 0 1.75-.78 1.75-1.75V12.5c0-.97-.78-1.75-1.75-1.75H17v-3a5 5 0 0 0-5-5Zm-3 8v-3a3 3 0 1 1 6 0v3H9Z"/></svg>
@@ -729,6 +734,11 @@
     </header>
 
     <main id="top" class="shell">
+      <div id="data-banner" class="data-banner" role="status" aria-live="polite" hidden>
+        <span class="data-banner-dot" aria-hidden="true"></span>
+        <p id="data-banner-text">正在讀取最新更表…</p>
+        <button id="data-banner-retry" class="data-banner-retry" type="button" hidden>重試</button>
+      </div>
       <section class="shift-overview" aria-label="各更份上落更時間">
         <div class="shift-overview-heading">
           <p class="eyebrow">SHIFT HOURS</p>
@@ -785,6 +795,7 @@
             <div>
               <p class="section-kicker">MONTHLY VIEW</p>
               <h2 id="calendar-title">--</h2>
+              <p id="calendar-updated" class="calendar-updated"></p>
             </div>
             <div id="calendar-summary" class="calendar-summary"></div>
           </div>
@@ -913,7 +924,7 @@
       <span>此為個人自訂工具，與任何政府部門或機構無關。</span>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.7.7/lunar.min.js"></script>
-    <script type="module" src="assets/app.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.7.7/lunar.min.js" onload="window.__lunarReady && window.__lunarReady()"></script>
+    <script type="module" src="assets/app.js?v=20261110"></script>
   </body>
 </html>
