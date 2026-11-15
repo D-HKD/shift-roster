@@ -1657,10 +1657,12 @@ async function publishDayRest(key, day) {
     throw err;
   }
   const token = await user.getIdToken();
+  // 欄位路徑一定要用反引號包住，因為 key 以數字開頭又有橫線
+  const maskPath = `days.\`${key}\``;
   const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}` +
     `/databases/(default)/documents/rosters/${state.year}` +
     `?key=${firebaseConfig.apiKey}` +
-    `&updateMask.fieldPaths=${encodeURIComponent(`days.${key}`)}` +
+    `&updateMask.fieldPaths=${encodeURIComponent(maskPath)}` +
     `&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=updatedBy`;
   const res = await fetch(url, {
     method: "PATCH",
@@ -1725,7 +1727,9 @@ async function applyQuickShift(type) {
       renderDataState();
     } else {
       restoreDayLocally(key, previous);
-      toast("未能發布，請檢查網絡或登入狀態", "error");
+      toast(error?.code === "auth" ? "請先撳「管理員」用 Google 登入"
+        : error?.code === "rest" ? "伺服器拒絕寫入，請撳「重試」"
+        : "未能發布，請檢查網絡或登入狀態", "error");
     }
   }
 }
@@ -1762,7 +1766,9 @@ async function saveQuickNote() {
   } catch (error) {
     console.error("Saving note failed:", error);
     restoreDayLocally(key, previous);
-    toast("未能儲存備註", "error");
+    toast(error?.code === "auth" ? "請先撳「管理員」用 Google 登入"
+      : error?.code === "rest" ? "伺服器拒絕寫入，請撳「重試」"
+      : "未能儲存備註", "error");
   }
 }
 
