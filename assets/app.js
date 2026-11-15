@@ -288,7 +288,7 @@ function renderDataState() {
     retry.hidden = !state.slowSync;
   } else if (state.restMode) {
     banner.dataset.state = "stale";
-    text.textContent = "已用備用連線讀到最新更表（唯讀）。如要修改，請撳「重試」重新連接。";
+    text.textContent = "已用備用連線同步最新更表，可以照樣修改。撳「重試」可回復即時同步。";
     retry.hidden = false;
   } else if (state.saveUnconfirmed) {
     banner.dataset.state = "stale";
@@ -1479,17 +1479,23 @@ async function saveDay(event) {
     note: $("#edit-note").value.trim()
   };
   try {
-    const { doc, setDoc, serverTimestamp, db } = state.firebase;
-    await setDoc(doc(db, "rosters", String(state.year)), {
-      year: state.year,
-      days: { ...state.days, [state.selectedKey]: day },
-      updatedAt: serverTimestamp(),
-      updatedBy: state.user.uid
-    });
+    if (state.restMode) {
+      await publishDayRest(state.selectedKey, day);
+    } else {
+      const { doc, setDoc, serverTimestamp, db } = state.firebase;
+      await withTimeout(setDoc(doc(db, "rosters", String(state.year)), {
+        year: state.year,
+        days: { ...state.days, [state.selectedKey]: day },
+        updatedAt: serverTimestamp(),
+        updatedBy: state.user.uid
+      }), 8000);
+    }
     $("#admin-message").textContent = "已發布。其他瀏覽者會自動看到更新。";
   } catch (error) {
     console.error("Save failed:", error);
-    $("#admin-message").textContent = "未能儲存。請檢查 Firestore 安全規則中的管理員 UID 是否正確。";
+    $("#admin-message").textContent = error?.timeout
+      ? "連線太慢，未確認發布。請撳頁面上方「重試」再試。"
+      : "未能儲存。請檢查登入狀態或 Firestore 安全規則。";
   } finally {
     save.disabled = false;
     save.textContent = "儲存並發布";
@@ -1503,16 +1509,22 @@ async function clearDay() {
   clear.disabled = true;
   try {
     const { [state.selectedKey]: removed, ...nextDays } = state.days;
+    if (state.restMode) {
+      $("#admin-message").textContent = "備用連線模式下暫不支援整日清除，請先撳上方「重試」恢復連線。";
+      return;
+    }
     const { doc, setDoc, serverTimestamp, db } = state.firebase;
-    await setDoc(doc(db, "rosters", String(state.year)), {
+    await withTimeout(setDoc(doc(db, "rosters", String(state.year)), {
       year: state.year,
       days: nextDays,
       updatedAt: serverTimestamp(),
       updatedBy: state.user.uid
-    });
+    }), 8000);
   } catch (error) {
     console.error("Clear failed:", error);
-    $("#admin-message").textContent = "未能清除編排。請檢查你的管理員設定。";
+    $("#admin-message").textContent = error?.timeout
+      ? "連線太慢，未能清除。請撳上方「重試」後再試。"
+      : "未能清除編排。請檢查你的管理員設定。";
   } finally {
     clear.disabled = false;
   }
@@ -1623,6 +1635,69 @@ async function publishDay(key, day) {
   }
 }
 
+/* ---------- 備用寫入：串流通道斷咗都可以發布（用 Firebase ID token 直接寫 REST） ---------- */
+function dayToRestValue(day) {
+  return {
+    mapValue: {
+      fields: {
+        type: { stringValue: day.type || "" },
+        start: { stringValue: day.start || "" },
+        end: { stringValue: day.end || "" },
+        note: { stringValue: day.note || "" }
+      }
+    }
+  };
+}
+
+async function publishDayRest(key, day) {
+  const user = state.firebase?.authInstance?.currentUser;
+  if (!user) {
+    const err = new Error("請先用管理員帳戶登入");
+    err.code = "auth";
+    throw err;
+  }
+  const token = await user.getIdToken();
+  const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}` +
+    `/databases/(default)/documents/rosters/${state.year}` +
+    `?key=${firebaseConfig.apiKey}` +
+    `&updateMask.fieldPaths=${encodeURIComponent(`days.${key}`)}` +
+    `&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=updatedBy`;
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      fields: {
+        days: { mapValue: { fields: { [key]: dayToRestValue(day) } } },
+        updatedAt: { timestampValue: new Date().toISOString() },
+        updatedBy: { stringValue: user.uid }
+      }
+    })
+  });
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 200);
+    console.error("REST publish failed:", res.status, detail);
+    const err = new Error(`備用連線發布失敗（${res.status}）`);
+    err.code = "rest";
+    throw err;
+  }
+  state.restMode = true;
+  state.lastSync = new Date();
+  state.updatedAt = new Date();
+  state.lastSnapshotAt = Date.now();
+  return true;
+}
+
+// 有正常通道就用 SDK；卡住或者已經喺備用模式就用 REST
+async function publishDaySmart(key, day) {
+  if (state.restMode) return publishDayRest(key, day);
+  try {
+    return await withTimeout(publishDay(key, day), 8000);
+  } catch (error) {
+    if (error?.timeout) return publishDayRest(key, day);
+    throw error;
+  }
+}
+
 async function applyQuickShift(type) {
   if (!state.isOwner || !state.firebase) return;
   const key = state.selectedKey;
@@ -1638,7 +1713,7 @@ async function applyQuickShift(type) {
   closeQuickEntry();
   setDayLocally(key, day);
   try {
-    await withTimeout(publishDay(key, day), 8000);
+    await publishDaySmart(key, day);
     state.saveUnconfirmed = false;
     toast(`${shortDate(key)} · ${shiftLabel(type)} 已發布`);
   } catch (error) {
@@ -1682,7 +1757,7 @@ async function saveQuickNote() {
   closeQuickEntry();
   setDayLocally(key, day);
   try {
-    await publishDay(key, day);
+    await publishDaySmart(key, day);
     toast(note ? "備註已儲存" : "備註已清除");
   } catch (error) {
     console.error("Saving note failed:", error);
