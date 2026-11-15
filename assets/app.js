@@ -286,6 +286,14 @@ function renderDataState() {
       ? `未能連接伺服器，顯示本機資料${state.lastSync ? `（最後同步 ${formatStamp(state.lastSync)}）` : ""}。`
       : `正在同步，暫時顯示本機資料${state.lastSync ? `（${formatStamp(state.lastSync)}）` : ""}…`;
     retry.hidden = !state.slowSync;
+  } else if (state.restMode) {
+    banner.dataset.state = "stale";
+    text.textContent = "已用備用連線讀到最新更表（唯讀）。如要修改，請撳「重試」重新連接。";
+    retry.hidden = false;
+  } else if (state.saveUnconfirmed) {
+    banner.dataset.state = "stale";
+    text.textContent = "有修改未確認發布（連線慢）。請撳「重試」確認，其他人先會見到。";
+    retry.hidden = false;
   } else {
     banner.hidden = true;
   }
@@ -296,7 +304,8 @@ function renderDataState() {
     if (!source) {
       updated.textContent = configured ? "" : "示範資料";
     } else {
-      updated.textContent = `更表更新於 ${formatStamp(source)}${state.fromCache && !state.loading ? " · 本機快取" : ""}`;
+      updated.textContent = `更表更新於 ${formatStamp(source)}` +
+        (state.restMode ? " · 備用連線" : state.fromCache && !state.loading ? " · 本機快取" : "");
     }
   }
 }
@@ -1260,12 +1269,14 @@ async function subscribeRoster() {
     state.slowSync = false;
     state.lastSync = new Date();
     state.lastSnapshotAt = Date.now();
+    if (!snapshot.metadata.fromCache) stopRestFallback();
     if (state.fromCache) {
       // 只係讀到本機快取：6 秒內未收到伺服器版本就當連唔到
       window.setTimeout(() => {
-        if (!state.fromCache) return;
+        if (!state.fromCache || state.restMode) return;
         state.slowSync = true;
         renderDataState();
+        void useRestFallback("slow-sync");
       }, 6000);
     }
     updateStatus(
@@ -1280,7 +1291,81 @@ async function subscribeRoster() {
     state.loadError = true;
     updateStatus("未能讀取", "error");
     render();
+    void useRestFallback("snapshot-error");
   });
+
+  // 看門狗：10 秒都仲係快取／未載入，就用備用連線
+  window.setTimeout(() => {
+    if (state.mode !== "cloud" || state.restMode) return;
+    if (state.loading || state.fromCache) void useRestFallback("watchdog");
+  }, 10000);
+}
+
+/* ---------- 備用連線：直接向 Firestore REST 讀（應對串流通道被封／卡住） ---------- */
+const ROSTER_REST_BASE = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/rosters`;
+
+function restDocToData(json) {
+  const map = json?.fields?.days?.mapValue?.fields || {};
+  const days = {};
+  for (const key of Object.keys(map)) {
+    const v = map[key].mapValue?.fields || {};
+    days[key] = {
+      type: v.type?.stringValue || "",
+      start: v.start?.stringValue || "",
+      end: v.end?.stringValue || "",
+      note: v.note?.stringValue || ""
+    };
+  }
+  const ts = json?.fields?.updatedAt?.timestampValue;
+  return { days, updatedAt: ts ? new Date(ts) : null };
+}
+
+async function fetchRosterRest(year) {
+  const url = `${ROSTER_REST_BASE}/${year}?key=${firebaseConfig.apiKey}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (res.status === 404) return { days: {}, updatedAt: null };
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return restDocToData(await res.json());
+}
+
+let restTimer = null;
+
+function stopRestFallback() {
+  state.restMode = false;
+  if (restTimer) {
+    clearTimeout(restTimer);
+    restTimer = null;
+  }
+}
+
+async function useRestFallback(reason) {
+  if (state.mode !== "cloud" || !configured) return;
+  try {
+    const { days, updatedAt } = await fetchRosterRest(state.year);
+    state.days = days;
+    state.updatedAt = updatedAt;
+    state.loading = false;
+    state.loadError = false;
+    state.fromCache = false;
+    state.slowSync = false;
+    state.restMode = true;
+    state.lastSync = new Date();
+    state.lastSnapshotAt = Date.now();
+    updateStatus(`已同步 · ${formatStamp(state.lastSync)}`, "live");
+    render();
+    startWeatherOnce();
+  } catch (error) {
+    console.warn("REST fallback failed:", reason, error);
+    state.loadError = true;
+    state.restMode = false;
+    renderDataState();
+  }
+  if (restTimer) clearTimeout(restTimer);
+  restTimer = window.setTimeout(() => {
+    if (state.mode !== "cloud") return;
+    if (state.restMode) void useRestFallback("poll");
+    else void subscribeRoster();
+  }, 60000);
 }
 
 async function switchYear(year) {
@@ -1553,13 +1638,35 @@ async function applyQuickShift(type) {
   closeQuickEntry();
   setDayLocally(key, day);
   try {
-    await publishDay(key, day);
+    await withTimeout(publishDay(key, day), 8000);
+    state.saveUnconfirmed = false;
     toast(`${shortDate(key)} · ${shiftLabel(type)} 已發布`);
   } catch (error) {
     console.error("Quick save failed:", error);
-    restoreDayLocally(key, previous);
-    toast("未能發布，請檢查網絡或登入狀態", "error");
+    if (error?.timeout) {
+      // 可能已經寫入，只係未收到確認；保留畫面，叫用戶重試確認
+      toast("連線好慢：未確認發布，請撳橫額「重試」再確認", "error");
+      state.saveUnconfirmed = true;
+      renderDataState();
+    } else {
+      restoreDayLocally(key, previous);
+      toast("未能發布，請檢查網絡或登入狀態", "error");
+    }
   }
+}
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const err = new Error("timeout");
+      err.timeout = true;
+      reject(err);
+    }, ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); }
+    );
+  });
 }
 
 async function saveQuickNote() {
@@ -1698,6 +1805,7 @@ document.addEventListener("visibilitychange", () => {
 // 由背景返嚟、bfcache 還原或重新連線時，主動再同步一次，避免停咗喺舊更表
 function refreshRosterIfStale() {
   if (state.mode !== "cloud" || !state.firebase) return;
+  if (state.restMode) { void useRestFallback("focus"); return; }
   if (Date.now() - state.lastSnapshotAt < 15000) return;
   void subscribeRoster();
 }
