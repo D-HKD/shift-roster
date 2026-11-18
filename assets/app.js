@@ -286,10 +286,14 @@ function renderDataState() {
       ? `未能連接伺服器，顯示本機資料${state.lastSync ? `（最後同步 ${formatStamp(state.lastSync)}）` : ""}。`
       : `正在同步，暫時顯示本機資料${state.lastSync ? `（${formatStamp(state.lastSync)}）` : ""}…`;
     retry.hidden = !state.slowSync;
-  } else if (state.restMode) {
+  } else if (state.restMode && state.slowSync) {
+    // 只有「備用連線都跟唔上」才出橫額；正常輪詢時唔嘈用戶。
     banner.dataset.state = "stale";
-    text.textContent = "已用備用連線同步最新更表，可以照樣修改。撳「重試」可回復即時同步。";
+    text.textContent = `已用備用連線同步（每 15 秒自動更新）${state.lastSync ? `，最後 ${formatStamp(state.lastSync)}` : ""}。撳「重試」可回復即時同步。`;
     retry.hidden = false;
+  } else if (state.restMode) {
+    // 備用連線運作正常：唔顯示橫額，改在下方「更表更新於 …」標示。
+    banner.hidden = true;
   } else if (state.saveUnconfirmed) {
     banner.dataset.state = "stale";
     text.textContent = "有修改未確認發布（連線慢）。請撳「重試」確認，其他人先會見到。";
@@ -305,7 +309,7 @@ function renderDataState() {
       updated.textContent = configured ? "" : "示範資料";
     } else {
       updated.textContent = `更表更新於 ${formatStamp(source)}` +
-        (state.restMode ? " · 備用連線" : state.fromCache && !state.loading ? " · 本機快取" : "");
+        (state.restMode ? " · 每 15 秒自動更新" : state.fromCache && !state.loading ? " · 本機快取" : "");
     }
   }
 }
@@ -1298,7 +1302,7 @@ async function subscribeRoster() {
   window.setTimeout(() => {
     if (state.mode !== "cloud" || state.restMode) return;
     if (state.loading || state.fromCache) void useRestFallback("watchdog");
-  }, 18000);
+  }, 25000);
 }
 
 /* ---------- 備用連線：直接向 Firestore REST 讀（應對串流通道被封／卡住） ---------- */
