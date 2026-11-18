@@ -1,12 +1,14 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Everyone holding the website link can view the roster.
-    // Replace the placeholder with the UID of the sole editor.
+    // 任何拿到連結的人都可以讀（唯讀）。
     match /rosters/{year} {
       allow read: if true;
+
+      // 只有管理員可以寫。UID 必須與 assets/firebase-config.js 的 ADMIN_UID 一致。
+      // 註：UID 本身不是秘密（客戶端程式碼已含），真正的保護是這條規則。
       allow create, update, delete: if request.auth != null
-        && request.auth.uid == "PASTE_YOUR_FIREBASE_AUTH_UID_HERE";
+        && request.auth.uid == "ziWA6MFvPZX7t8yce3pycAg8CLG2";
     }
   }
 }

@@ -925,6 +925,18 @@
     </footer>
 
     <script async src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.7.7/lunar.min.js" onload="window.__lunarReady && window.__lunarReady()"></script>
-    <script type="module" src="assets/app.js?v=20261110"></script>
+    <!--
+      版本號自動產生：每次載入都帶一個新嘅 stamp（每小時變一次），
+      舊版靠人手改 ?v=20261110，結果改咗 app.js 但版本號冇變，
+      其他人（尤其長期開住嘅分頁）一直執行舊程式 → 見到舊更份／錯日期。
+    -->
+    <script type="module">
+      const stamp = new Date().toISOString().slice(0, 13).replace(/\D/g, "");
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = `assets/styles.css?v=${stamp}`;
+      document.head.append(css);
+      import(`./assets/app.js?v=${stamp}`);
+    </script>
   </body>
 </html>
