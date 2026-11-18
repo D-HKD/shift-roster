@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Firestore 搬遷工具</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font: 15px/1.6 -apple-system, "Noto Sans HK", sans-serif; max-width: 760px; margin: 32px auto; padding: 0 18px; }
+      h1 { font-size: 22px; }
+      textarea { width: 100%; min-height: 170px; font: 12px/1.5 ui-monospace, monospace; padding: 10px; border-radius: 10px; }
+      button { font: inherit; padding: 9px 16px; margin: 6px 8px 6px 0; border-radius: 10px; border: 1px solid #888; background: #f4f6f8; cursor: pointer; }
+      button:disabled { opacity: .45; cursor: not-allowed; }
+      pre { background: rgba(127,127,127,.12); padding: 12px; border-radius: 10px; white-space: pre-wrap; font: 12px/1.6 ui-monospace, monospace; min-height: 120px; }
+      .hint { color: #666; font-size: 13px; }
+      .ok { color: #0a7d43; font-weight: 700; }
+      .err { color: #b3261e; font-weight: 700; }
+      code { background: rgba(127,127,127,.16); padding: 1px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Firestore 搬遷工具（舊專案 → 亞洲區新專案）</h1>
+    <p class="hint">
+      用途：把 <code>daniel-shift</code>（美國區）嘅 <code>rosters/2026</code>、<code>rosters/2027</code>
+      搬去新專案。舊專案係公開讀取，所以唔需要登入；寫入新專案需要管理員 Google 登入。
+      搬完之後請刪除本檔案。
+    </p>
+
+    <h2 style="font-size:16px">1. 貼上新專案 Firebase config</h2>
+    <textarea id="cfg" spellcheck="false" placeholder='{
+  "apiKey": "...",
+  "authDomain": "xxx.firebaseapp.com",
+  "projectId": "xxx",
+  "storageBucket": "xxx.firebasestorage.app",
+  "messagingSenderId": "...",
+  "appId": "..."
+}'></textarea>
+    <div>
+      <button id="save">儲存設定</button>
+      <button id="login" disabled>以 Google 登入新專案</button>
+    </div>
+    <p class="hint" id="uidLine">UID：（未登入）</p>
+
+    <h2 style="font-size:16px">2. 搬資料</h2>
+    <div>
+      <button id="run" disabled>開始搬遷 2026 + 2027</button>
+    </div>
+    <pre id="log">（未開始）</pre>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+      import { getFirestore, doc, setDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+      import {
+        getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged
+      } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+      const OLD = {
+        projectId: "daniel-shift",
+        base: "https://firestore.googleapis.com/v1/projects/daniel-shift/databases/(default)/documents/rosters"
+      };
+      const YEARS = ["2026", "2027"];
+      const CONFIG_KEY = "migrate-new-config";
+
+      const $ = (s) => document.querySelector(s);
+      const logEl = $("#log");
+      function log(msg, cls) {
+        const line = cls ? `<span class="${cls}">${msg}</span>` : msg;
+        logEl.innerHTML += (logEl.textContent === "（未開始）" ? "" : "\n") + line;
+      }
+
+      let app = null, db = null, auth = null, user = null;
+
+      $("#cfg").value = localStorage.getItem(CONFIG_KEY) || "";
+
+      $("#save").addEventListener("click", () => {
+        const raw = $("#cfg").value.trim();
+        try {
+          const cfg = JSON.parse(raw);
+          if (!cfg.projectId || !cfg.apiKey) throw new Error("缺少 projectId 或 apiKey");
+          localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg, null, 2));
+          boot(cfg);
+          log("✅ 設定已儲存：" + cfg.projectId, "ok");
+        } catch (e) {
+          log("❌ 設定格式錯誤：" + e.message, "err");
+        }
+      });
+
+      function boot(cfg) {
+        app = initializeApp(cfg, "migrate-" + Date.now());
+        db = getFirestore(app);
+        auth = getAuth(app);
+        $("#login").disabled = false;
+        onAuthStateChanged(auth, (u) => {
+          user = u;
+          $("#uidLine").textContent = u ? `UID：${u.uid}（${u.email || ""}）` : "UID：（未登入）";
+          $("#run").disabled = !u;
+          if (u) log("👤 已登入：" + (u.email || u.uid), "ok");
+        });
+      }
+
+      const saved = localStorage.getItem(CONFIG_KEY);
+      if (saved) { try { boot(JSON.parse(saved)); } catch {} }
+
+      $("#login").addEventListener("click", async () => {
+        try {
+          await signInWithPopup(auth, new GoogleAuthProvider());
+        } catch (e) {
+          log("❌ 登入失敗：" + e.message + "（請確認新專案已啟用 Google 登入、並已加入本站網域）", "err");
+        }
+      });
+
+      // 舊專案 REST → 純 JS 物件
+      function restToPlain(json) {
+        const days = {};
+        const map = json?.fields?.days?.mapValue?.fields || {};
+        for (const key of Object.keys(map)) {
+          const f = map[key].mapValue?.fields || {};
+          days[key] = {
+            type: f.type?.stringValue || "",
+            start: f.start?.stringValue || "",
+            end: f.end?.stringValue || "",
+            note: f.note?.stringValue || ""
+          };
+        }
+        return {
+          days,
+          year: Number(json?.fields?.year?.integerValue ?? 0) || null,
+          updatedBy: json?.fields?.updatedBy?.stringValue || "",
+          updatedAtRaw: json?.fields?.updatedAt?.timestampValue || null
+        };
+      }
+
+      $("#run").addEventListener("click", async () => {
+        if (!user) return;
+        $("#run").disabled = true;
+        logEl.textContent = "";
+        let total = 0;
+
+        for (const year of YEARS) {
+          try {
+            log(`⬇️  讀取舊專案 rosters/${year} …`);
+            const res = await fetch(`${OLD.base}/${year}`, { cache: "no-store" });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            const plain = restToPlain(await res.json());
+            const count = Object.keys(plain.days).length;
+            log(`   讀到 ${count} 日`);
+
+            const payload = {
+              year: Number(year),
+              days: plain.days,
+              updatedBy: plain.updatedBy || "",
+              updatedAt: plain.updatedAtRaw ? Timestamp.fromDate(new Date(plain.updatedAtRaw)) : Timestamp.now()
+            };
+
+            log(`⬆️  寫入新專案 rosters/${year} …`);
+            await setDoc(doc(db, "rosters", year), payload);
+            total += count;
+            log(`   ✅ 完成 ${year}（${count} 日）`, "ok");
+          } catch (e) {
+            log(`   ❌ ${year} 失敗：${e.message}`, "err");
+          }
+        }
+
+        try {
+          log(`🔎 驗證：重新讀取新專案 …`);
+          for (const year of YEARS) {
+            const res = await fetch(
+              `https://firestore.googleapis.com/v1/projects/${JSON.parse(localStorage.getItem(CONFIG_KEY)).projectId}/databases/(default)/documents/rosters/${year}?key=${JSON.parse(localStorage.getItem(CONFIG_KEY)).apiKey}`,
+              { cache: "no-store" }
+            );
+            if (!res.ok) { log(`   ${year} 讀取失敗 HTTP ${res.status}`, "err"); continue; }
+            const j = await res.json();
+            const n = Object.keys(j?.fields?.days?.mapValue?.fields || {}).length;
+            log(`   ${year} 現有 ${n} 日 ${n > 0 ? "✅" : "❌"}`);
+          }
+        } catch (e) {
+          log("   驗證出錯：" + e.message, "err");
+        }
+
+        log(`\n🎉 搬遷結束，合計 ${total} 日。`, "ok");
+        log("下一步：到 Firebase Console 收緊 Rules（改成只准你嘅 UID 寫入）。");
+        $("#run").disabled = false;
+      });
+    </script>
+  </body>
+</html>
