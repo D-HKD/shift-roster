@@ -1331,11 +1331,15 @@ async function fetchRosterRest(year) {
 let restTimer = null;
 
 function stopRestFallback() {
+  const wasFallback = state.restMode;
   state.restMode = false;
   if (restTimer) {
     clearTimeout(restTimer);
     restTimer = null;
   }
+  // 即時通道恢復之後要即刻收返橫額，否則會一直顯示「已用備用連線」，
+  // 同上面「已同步」狀態互相矛盾（2026-11-18 修）。
+  if (wasFallback) renderDataState();
 }
 
 async function useRestFallback(reason) {
