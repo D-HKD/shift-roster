@@ -1277,7 +1277,7 @@ async function subscribeRoster() {
         state.slowSync = true;
         renderDataState();
         void useRestFallback("slow-sync");
-      }, 6000);
+      }, 12000);
     }
     updateStatus(
       state.fromCache ? `本機快取 · ${formatStamp(state.lastSync)}` : `已同步 · ${formatStamp(state.lastSync)}`,
@@ -1298,7 +1298,7 @@ async function subscribeRoster() {
   window.setTimeout(() => {
     if (state.mode !== "cloud" || state.restMode) return;
     if (state.loading || state.fromCache) void useRestFallback("watchdog");
-  }, 10000);
+  }, 18000);
 }
 
 /* ---------- 備用連線：直接向 Firestore REST 讀（應對串流通道被封／卡住） ---------- */
@@ -1363,9 +1363,14 @@ async function useRestFallback(reason) {
   if (restTimer) clearTimeout(restTimer);
   restTimer = window.setTimeout(() => {
     if (state.mode !== "cloud") return;
+    // 分頁隱藏時唔浪費流量，返到前台即刻補一次
+    if (document.hidden) {
+      restTimer = window.setTimeout(() => void useRestFallback("poll"), 15000);
+      return;
+    }
     if (state.restMode) void useRestFallback("poll");
     else void subscribeRoster();
-  }, 60000);
+  }, 15000);
 }
 
 async function switchYear(year) {
@@ -1407,7 +1412,11 @@ async function startFirebase() {
       db = firestore.initializeFirestore(app, {
         localCache: firestore.persistentLocalCache({
           tabManager: firestore.persistentMultipleTabManager()
-        })
+        }),
+        // 很���網絡（公司／學校 proxy、手機網絡）會擋住 Firestore 的 WebChannel 串流，
+        // 令 onSnapshot 遲遲收唔到伺服器版本，程式就跌落「備用連線」。
+        // 強制 long polling 走普通 HTTP 請求，邊個網絡都用得。
+        experimentalForceLongPolling: true
       });
     } catch (error) {
       console.warn("Persistent cache unavailable, fall back to memory cache:", error);
